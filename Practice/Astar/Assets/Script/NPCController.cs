@@ -1,131 +1,299 @@
-using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
-[RequireComponent(typeof(NPCPathfinder))] // NPCPathfinder 컴포넌트 필요
+/// <summary>
+/// NPC의 이동을 제어하는 클래스
+/// </summary>
 public class NPCController : MonoBehaviour
 {
-    [Header("이동 설정")]
-    public float moveSpeed = 3.0f;        // 이동 속도 (초당 월드 유닛)
-    public float arrivalThreshold = 0.05f; // 웨이포인트 도착 판정 거리
+    [SerializeField] private float mMoveSpeed = 2f; // 이동 속도
+    [SerializeField] private float mReachedDistance = 0.01f; // 목표 지점 도달 판정 거리
+    [SerializeField] private Vector2Int mMapBottomLeft; // 맵의 왼쪽 하단 좌표
+    [SerializeField] private Vector2Int mMapTopRight; // 맵의 오른쪽 상단 좌표
+    [SerializeField] private TargetType mTargetType; // 찾아갈 목표물의 타입
+    [SerializeField] private float mTargetSearchInterval = 2f; // 목표물 탐색 간격
+    [SerializeField] private float mPathUpdateInterval = 2f; // 경로 업데이트 간격
 
-    private List<Vector2Int> currentPath; // 현재 따라갈 경로 (NPCPathfinder로부터 받음)
-    private int currentWaypointIndex;     // 현재 경로에서 목표로 하는 웨이포인트 인덱스
-    private bool isMoving = false;        // 현재 이동 중인지 여부
+    private List<Node> mCurrentPath; // 현재 경로
+    private int mCurrentPathIndex; // 현재 경로 인덱스
+    private Vector2 mTargetPosition; // 현재 목표 위치
+    private bool mIsMoving; // 이동 중 여부
+    private Transform mCurrentTarget; // 현재 목표물
+    private float mLastTargetSearchTime; // 마지막 목표물 탐색 시간
+    private float mLastPathUpdateTime; // 마지막 경로 업데이트 시간
 
-    private NPCPathfinder npcPathfinder; // 경로 탐색 및 재계산 요청을 위한 참조
-
-    // NPC가 현재 유휴 상태인지 확인하는 프로퍼티
-    public bool IsIdle => !isMoving;
-    // NPC가 현재 이동 중인지 확인하는 프로퍼티 (외부에서 사용 가능)
-    public bool IsMoving => isMoving;
-
-    void Awake()
+    private void Start()
     {
-        // NPCPathfinder 컴포넌트 가져오기
-        npcPathfinder = GetComponent<NPCPathfinder>();
-        if (npcPathfinder == null) 
-        {
-            Debug.LogError("NPCPathfinder 컴포넌트를 찾을 수 없습니다!", this);
-        }
-    }
-
-    /// <summary>
-    /// 주어진 경로를 따라 이동을 시작합니다.
-    /// </summary>
-    /// <param name="path">이동할 경로 (Vector2Int 좌표 리스트)</param>
-    public void StartMovingAlongPath(List<Vector2Int> path)
-    {
-        if (path == null || path.Count == 0) // 경로가 유효하지 않으면 중지
-        {
-            StopMoving();
-            return;
-        }
-
-        // 참고: 경로 재계산 시 거의 동일한 경로가 들어올 경우,
-        //       현재 웨이포인트 인덱스를 유지하는 최적화를 통해 부드러운 연결 가능.
-        //       단순화를 위해 여기서는 항상 처음부터 경로를 시작.
-
-        currentPath = path;
-        currentWaypointIndex = 0; // 경로의 첫 번째 웨이포인트부터 시작
-        isMoving = true;        // 이동 상태로 변경
-    }
-
-    /// <summary>
-    /// NPC의 현재 이동을 중지하고 경로를 초기화합니다.
-    /// </summary>
-    public void StopMoving()
-    {
-        isMoving = false;
-        currentPath = null;
-        currentWaypointIndex = 0;
+        mLastTargetSearchTime = Time.time;
+        mLastPathUpdateTime = Time.time;
+        FindAndMoveToTarget();
     }
 
     private void Update()
     {
-        // 이동 중이 아니거나, 경로가 없거나, 경로 끝에 도달했으면 실행 중지
-        if (!isMoving || currentPath == null || currentWaypointIndex >= currentPath.Count)
+        // 일정 간격으로 목표물 탐색
+        if (Time.time - mLastTargetSearchTime >= mTargetSearchInterval)
         {
-            if (isMoving) StopMoving(); // 상태 일관성을 위해 확실히 중지
-            return;
+            FindAndMoveToTarget();
+            mLastTargetSearchTime = Time.time;
         }
 
-        // 현재 목표 웨이포인트 좌표 가져오기
-        Vector2Int nextWaypointGridPos = currentPath[currentWaypointIndex];
+        // 현재 목표물이 있고, 일정 간격으로 경로 업데이트
+        if (mCurrentTarget != null && Time.time - mLastPathUpdateTime >= mPathUpdateInterval)
+        {
+            UpdatePath();
+            mLastPathUpdateTime = Time.time;
+        }
+
+        if (!mIsMoving) return;
+
+        // 현재 목표 지점으로 이동
+        Vector2 direction = (mTargetPosition - (Vector2)transform.position).normalized;
         
-        // --- 장애물 확인 --- 
-        // 다음 웨이포인트가 현재 이동 불가능한 상태인지 확인 (벽 또는 다른 유닛)
-        if (!GridManager.Instance.IsWalkable(nextWaypointGridPos))
-        {   
-            // 일시적인 장애물(다른 NPC)인지, 아니면 진짜 벽인지 구분하여 다른 처리 가능
-            // bool isForbidden = npcPathfinder.IsNodeCurrentlyForbidden(nextWaypointGridPos); 
-            // if(isForbidden) { // 잠시 대기하는 로직 추가 가능 } 
-            
-            // 현재 로직: 다음 지점이 막혔으면 무조건 경로 재계산 요청
-            Debug.LogWarning($"다음 웨이포인트 {nextWaypointGridPos}에 장애물 감지! 경로 재계산 요청.", this);
-            npcPathfinder.TriggerPathRecalculation(); // 경로 재계산 요청
-            return; // 현재 프레임 이동 중지 (새 경로가 오면 StartMovingAlongPath 호출됨)
+        // 한 번에 한 축으로만 이동
+        if (Mathf.Abs(direction.x) > Mathf.Abs(direction.y))
+        {
+            // x축 이동이 더 크면 x축으로만 이동
+            direction = new Vector2(Mathf.Sign(direction.x), 0);
+        }
+        else
+        {
+            // y축 이동이 더 크면 y축으로만 이동
+            direction = new Vector2(0, Mathf.Sign(direction.y));
         }
 
-        // --- 이동 처리 --- 
-        // 목표 웨이포인트의 월드 좌표로 변환
-        Vector3 targetWorldPosition = GridManager.Instance.GridToWorld(nextWaypointGridPos);
-        // 목표 지점을 향해 부드럽게 이동
-        transform.position = Vector3.MoveTowards(transform.position, targetWorldPosition, moveSpeed * Time.deltaTime);
+        transform.position += (Vector3)(direction * mMoveSpeed * Time.deltaTime);
 
-        // --- 도착 확인 --- 
-        // 목표 웨이포인트에 충분히 가까워졌는지 확인 (제곱 거리 사용으로 성능 향상)
-        if ((targetWorldPosition - transform.position).sqrMagnitude < arrivalThreshold * arrivalThreshold)
-        {   
-            // 웨이포인트 도달
-            int previousWaypointIndex = currentWaypointIndex;
-            currentWaypointIndex++; // 다음 웨이포인트로 인덱스 증가
-
-            // 경로의 마지막 지점에 도달했는지 확인
-            if (currentWaypointIndex >= currentPath.Count)
-            {   
-                StopMoving(); // 이동 종료
-            }
-            // --- 최종 접근 시 재계산 --- 
-            // 마지막에서 두 번째 노드에 막 도착하여 최종 목적지를 향할 때,
-            // 경로를 다시 확인하여 최신 상태 반영 (다른 NPC 도착, 목표물 미세 이동 등)
-            else if (currentWaypointIndex == currentPath.Count - 1)
+        // 목표 지점에 도달했는지 확인
+        if (Vector2.Distance(transform.position, mTargetPosition) <= mReachedDistance)
+        {
+            mCurrentPathIndex++;
+            
+            // 다음 목표 지점이 있으면 이동
+            if (mCurrentPathIndex < mCurrentPath.Count)
             {
-                // Debug.Log("최종 목적지 접근 중, 경로 확인 요청.");
-                npcPathfinder.TriggerPathRecalculation(); // 경로 재계산 요청
-                // 재계산된 경로가 올 때까지 현재 이동은 멈추지 않음
+                // 다음 경로 노드의 타일 중심으로 이동
+                mTargetPosition = new Vector2(
+                    mCurrentPath[mCurrentPathIndex].x + 0.5f,
+                    mCurrentPath[mCurrentPathIndex].y + 0.5f
+                );
+            }
+            else
+            {
+                // 경로의 끝에 도달
+                mIsMoving = false;
+                transform.position = mTargetPosition;
             }
         }
     }
 
-    // 디버그용 기즈모: 현재 목표 웨이포인트 표시
-     void OnDrawGizmosSelected()
-     {
-         if (isMoving && currentPath != null && currentWaypointIndex < currentPath.Count)
-         {
-             Gizmos.color = Color.magenta;
-             Vector3 targetWorldPos = GridManager.Instance.GridToWorld(currentPath[currentWaypointIndex]);
-             Gizmos.DrawWireSphere(targetWorldPos, arrivalThreshold); // 도착 판정 반경 표시
-             Gizmos.DrawLine(transform.position, targetWorldPos); // 현재 위치에서 목표 웨이포인트까지 선 표시
-         }
-     }
-} 
+    /// <summary>
+    /// 목표물을 찾고 이동을 시작하는 메서드
+    /// </summary>
+    private void FindAndMoveToTarget()
+    {
+        if (mTargetType == TargetType.None) return;
+
+        // "Target" 태그를 가진 모든 오브젝트 찾기
+        GameObject[] targets = GameObject.FindGameObjectsWithTag("Target");
+        Transform closestTarget = null;
+        float closestDistance = float.MaxValue;
+
+        foreach (GameObject target in targets)
+        {
+            // 목표물의 이름이 TargetType과 일치하는지 확인
+            if (target.name == mTargetType.ToString())
+            {
+                float distance = Vector2.Distance(transform.position, target.transform.position);
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closestTarget = target.transform;
+                }
+            }
+        }
+
+        // 가장 가까운 목표물이 있으면 목표물의 가장 가까운 StandingPoint 위치로 이동
+        if (closestTarget != null)
+        {
+            TargetController targetController = closestTarget.GetComponent<TargetController>();
+            if (targetController != null)
+            {
+                List<Vector2> standingPoints = targetController.GetStandingPositions();
+                if (standingPoints.Count > 0)
+                {
+                    // 가장 가까운 StandingPoint 찾기
+                    Vector2 closestStandingPoint = standingPoints[0];
+                    float minDistance = float.MaxValue;
+                    foreach (Vector2 point in standingPoints)
+                    {
+                        float distance = Vector2.Distance(transform.position, point);
+                        if (distance < minDistance)
+                        {
+                            minDistance = distance;
+                            closestStandingPoint = point;
+                        }
+                    }
+
+                    mCurrentTarget = closestTarget;
+                    MoveTo(closestStandingPoint);
+                }
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"타입이 {mTargetType}인 목표물을 찾을 수 없습니다.");
+        }
+    }
+
+    /// <summary>
+    /// 현재 경로를 업데이트하는 메서드
+    /// </summary>
+    private void UpdatePath()
+    {
+        if (mCurrentTarget == null) return;
+
+        TargetController targetController = mCurrentTarget.GetComponent<TargetController>();
+        if (targetController != null)
+        {
+            List<Vector2> standingPoints = targetController.GetStandingPositions();
+            if (standingPoints.Count > 0)
+            {
+                // 가장 가까운 StandingPoint 찾기
+                Vector2 closestStandingPoint = standingPoints[0];
+                float minDistance = float.MaxValue;
+                foreach (Vector2 point in standingPoints)
+                {
+                    // 거리 계산 (standing point와 실제 target의 방향이 대각선이라면 그만큼 멀리 있는 것으로 판단)
+                    Vector2 direction = (point - (Vector2)mCurrentTarget.position).normalized;
+                    float distance = Vector2.Distance(transform.position, point);
+                    if (direction.x != 0 && direction.y != 0)
+                    {
+                        distance += 2f;
+                    }
+
+                    if (distance < minDistance)
+                    {
+                        minDistance = distance;
+                        closestStandingPoint = point;
+                    }
+                }
+
+                MoveTo(closestStandingPoint);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 목표 위치로 이동을 시작하는 메서드
+    /// </summary>
+    /// <param name="_targetPosition">목표 위치</param>
+    public void MoveTo(Vector2 _targetPosition)
+    {
+        // NPC의 현재 위치를 타일 중심으로 조정
+        Vector2Int startPos = new Vector2Int(
+            Mathf.FloorToInt(transform.position.x),
+            Mathf.FloorToInt(transform.position.y)
+        );
+
+        // 목표 위치를 타일 중심으로 조정
+        Vector2Int targetPos = new Vector2Int(
+            Mathf.FloorToInt(_targetPosition.x),
+            Mathf.FloorToInt(_targetPosition.y)
+        );
+
+        Debug.Log($"시작 위치: {startPos}, 목표 위치: {targetPos}");
+
+        mCurrentPath = PathFinder.Instance.FindPath(startPos, targetPos, mMapBottomLeft, mMapTopRight);
+        
+        if (mCurrentPath != null && mCurrentPath.Count > 0)
+        {
+            mCurrentPathIndex = 0;
+            // 첫 번째 경로 노드의 타일 중심으로 이동
+            mTargetPosition = new Vector2(
+                mCurrentPath[0].x + 0.5f,
+                mCurrentPath[0].y + 0.5f
+            );
+            mIsMoving = true;
+        }
+        else
+        {
+            Debug.LogWarning("경로를 찾을 수 없습니다.");
+            mIsMoving = false;
+        }
+    }
+
+    private void OnDrawGizmos()
+    {
+        // 현재 경로 표시
+        if (mCurrentPath != null && mCurrentPath.Count > 0)
+        {
+            // 경로 선 표시
+            Gizmos.color = Color.yellow;
+            for (int i = 0; i < mCurrentPath.Count - 1; i++)
+            {
+                Gizmos.DrawLine(
+                    new Vector2(mCurrentPath[i].x, mCurrentPath[i].y),
+                    new Vector2(mCurrentPath[i + 1].x, mCurrentPath[i + 1].y)
+                );
+            }
+
+            // 경로 노드 표시
+            Gizmos.color = Color.blue;
+            foreach (Node node in mCurrentPath)
+            {
+                Gizmos.DrawWireSphere(new Vector2(node.x, node.y), 0.2f);
+            }
+
+            // 현재 목표 노드 강조 표시
+            if (mCurrentPathIndex < mCurrentPath.Count)
+            {
+                Gizmos.color = Color.green;
+                Gizmos.DrawSphere(new Vector2(mCurrentPath[mCurrentPathIndex].x, mCurrentPath[mCurrentPathIndex].y), 0.3f);
+            }
+        }
+
+        // 현재 목표물 표시
+        if (mCurrentTarget != null)
+        {
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(mCurrentTarget.position, 0.5f);
+            
+            // 목표물 방향 표시
+            Gizmos.DrawLine(transform.position, mCurrentTarget.position);
+        }
+
+        // NPC의 현재 위치와 이동 방향 표시
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawWireSphere(transform.position, 0.3f);
+        if (mIsMoving)
+        {
+            Vector2 direction = (mTargetPosition - (Vector2)transform.position).normalized;
+            Gizmos.DrawRay(transform.position, direction);
+        }
+
+        // 맵 경계 표시
+        Gizmos.color = Color.white;
+        Vector2 bottomLeft = new Vector2(mMapBottomLeft.x, mMapBottomLeft.y);
+        Vector2 topRight = new Vector2(mMapTopRight.x, mMapTopRight.y);
+        Vector2 topLeft = new Vector2(mMapBottomLeft.x, mMapTopRight.y);
+        Vector2 bottomRight = new Vector2(mMapTopRight.x, mMapBottomLeft.y);
+        
+        Gizmos.DrawLine(bottomLeft, topLeft);
+        Gizmos.DrawLine(topLeft, topRight);
+        Gizmos.DrawLine(topRight, bottomRight);
+        Gizmos.DrawLine(bottomRight, bottomLeft);
+
+        // NPC의 목표 타입 표시
+        UnityEditor.Handles.Label(transform.position + Vector3.up * 0.5f, 
+            $"Target: {mTargetType}\nMoving: {mIsMoving}");
+
+        // 현재 목표 위치 표시
+        if (mIsMoving)
+        {
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawWireSphere(mTargetPosition, 0.3f);
+        }
+    }
+}

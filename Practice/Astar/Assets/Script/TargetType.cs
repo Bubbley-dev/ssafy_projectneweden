@@ -1,8 +1,9 @@
+/// <summary>
+/// NPC가 이동할 수 있는 목표물의 타입
+/// </summary>
 public enum TargetType
 {
-    // Add your target type names here, matching the GameObject names
-    None, // Default or no specific target
-    Table,
-    Box,
-    Player // Example if player can also be a target type
+    None,       // 목표 없음
+    Table,      // 테이블
+    Box,        // 박스
 } 
