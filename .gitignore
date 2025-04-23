@@ -1,0 +1,65 @@
+# ========== Unity 기본 캐시 및 빌드 파일 무시 ==========
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+UserSettings/
+.vs/
+.DS_Store
+
+# ========== Rider / VSCode / Visual Studio 설정 ==========
+.idea/
+.vscode/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# ========== Android / iOS 빌드 산출물 ==========
+.gradle/
+*.apk
+*.aab
+*.dex
+*.apk.meta
+*.aab.meta
+
+# ========== Mac, Linux, Windows OS 관련 ==========
+*.DS_Store
+*.swp
+*.tmp
+*.bak
+*.orig
+*.~ 
+
+# ========== 기타 ==========
+sysinfo.txt
+*.stackdump
+*.log
+
+# ========== Unity 패키지 & 어드레서블 ==========
+[Aa]ssets/AddressableAssetsData/*/*.bin*
+[Aa]ssets/StreamingAssets/aa.meta
+[Aa]ssets/StreamingAssets/aa/*
+
+# ========== 빌드된 Unity 패키지 무시 ==========
+*.unitypackage
+*.unitypackage.meta
+*.app
+
+# ========== Crashlytics 관련 ==========
+crashlytics-build.properties
+
+# ========== Shader Graph 캐시 무시 ==========
+ShaderCache/
