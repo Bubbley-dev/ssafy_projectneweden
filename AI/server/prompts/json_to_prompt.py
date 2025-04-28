@@ -4,38 +4,28 @@ import time
 import re
 import random
 from pathlib import Path
+import subprocess
 
 # ==============================
 #  서버 호출 함수
 # ==============================
-def get_response(prompt: str, api_url: str) -> str:
+def get_response(prompt: str) -> str:
     """
-    prompt 문자열을 LLM 서버에 보내고,
-    JSON 응답에서 'response' 필드를 꺼내 출력 후 반환합니다.
+    prompt 문자열을 Ollama에 보내고 응답을 받아옵니다.
     """
-    payload = {
-        "model": "gemma3",
-        "prompt": prompt,
-        "stream": False  # 스트리밍 모드를 꺼서 단일 JSON 응답을 받습니다
-    }
-    # HTTP 요청 준비
-    data = json.dumps(payload).encode('utf-8')
-    req = urllib.request.Request(
-        api_url,
-        data=data,
-        headers={'Content-Type': 'application/json'}
+    start_time = time.time()  # 시작 시간 기록
+    
+    # Ollama 실행
+    result = subprocess.run(
+        [r'C:\Users\SSAFY\AppData\Local\Programs\Ollama\ollama.exe', 'run', 'gemma3'],
+        input=prompt + '\n',
+        capture_output=True,
+        text=True,
+        encoding='utf-8'
     )
-
-    # 요청-응답 시간 측정 시작
-    start_time = time.time()
-    with urllib.request.urlopen(req) as resp:
-        raw = resp.read()
-    elapsed = time.time() - start_time
-
-    # 받은 바이트를 디코딩하고 JSON 파싱
-    result = json.loads(raw.decode('utf-8'))
-    answer = result.get("response", "")
-
+    
+    answer = result.stdout
+    
     # 개행 문자 및 백슬래시 제거: 실제 newline, JSON 이스케이프된 "\n" 모두 처리
     answer = answer.replace("\\n", " ")
     answer = answer.replace("\n", " ")
@@ -49,7 +39,7 @@ def get_response(prompt: str, api_url: str) -> str:
 
     # 결과 출력
     print("🧠 응답:", answer)
-    print(f"⏱ 응답시간: {elapsed:.3f}초")
+    print(f"⏱ 응답시간: {time.time() - start_time:.3f}초")
 
     return answer
 
