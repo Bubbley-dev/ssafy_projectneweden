@@ -16,9 +16,9 @@ def hello():
 def receive_data():
     payload = request.get_json()
     print("Unity로부터 받은 데이터:", payload)
-
+    system_prompt = open('./prompts/system_prompt.txt', 'r', encoding='utf-8').read()
     prompt = jp.format_prompt(payload)
-    answer = jp.get_response(prompt)
+    answer = jp.get_response(prompt, system_prompt, 'http://localhost:11434/api/generate')
 
     # 1) 펜스 제거
     cleaned = answer.replace("```json", "").replace("```", "").strip()

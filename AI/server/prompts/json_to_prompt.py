@@ -9,22 +9,37 @@ import subprocess
 # ==============================
 #  서버 호출 함수
 # ==============================
-def get_response(prompt: str) -> str:
+def get_response(prompt: str, system_prompt: str, api_url: str = "http://localhost:11434/api/generate") -> str:
     """
-    prompt 문자열을 Ollama에 보내고 응답을 받아옵니다.
+    prompt 문자열을 Ollama API에 보내고 응답을 받아옵니다.
     """
     start_time = time.time()  # 시작 시간 기록
     
-    # Ollama 실행
-    result = subprocess.run(
-        [r'C:\Users\SSAFY\AppData\Local\Programs\Ollama\ollama.exe', 'run', 'gemma3'],
-        input=prompt + '\n',
-        capture_output=True,
-        text=True,
-        encoding='utf-8'
+    # API 요청 데이터 준비
+    data = {
+        "model": "gemma3:1b",
+        "prompt": prompt,
+        "system": system_prompt,
+        "temperature": 0,
+        "stream": False
+    }
+    
+    # API 요청 보내기
+    headers = {'Content-Type': 'application/json'}
+    req = urllib.request.Request(
+        api_url,
+        data=json.dumps(data).encode('utf-8'),
+        headers=headers,
+        method='POST'
     )
     
-    answer = result.stdout
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            answer = result.get('response', '')
+    except Exception as e:
+        print(f"Error calling Ollama API: {e}")
+        return ""
     
     # 개행 문자 및 백슬래시 제거: 실제 newline, JSON 이스케이프된 "\n" 모두 처리
     answer = answer.replace("\\n", " ")
@@ -148,3 +163,17 @@ def format_prompt(state_obj: dict) -> str:
 # state_data = json.loads(external_json_string)
 # prompt = format_prompt(state_data)
 # answer = get_response(prompt, 'http://localhost:11434/api/generate')
+
+if __name__ == "__main__":
+    # 테스트용 system 프롬프트
+    test_system_prompt = "You are a helpful AI assistant that speaks only in Korean."
+    
+    # 테스트용 프롬프트
+    test_prompt = "Hello, how are you?"
+    
+    # API 호출 테스트
+    response = get_response(test_prompt, test_system_prompt)
+    print("\n=== 테스트 결과 ===")
+    print(f"System 프롬프트: {test_system_prompt}")
+    print(f"입력 프롬프트: {test_prompt}")
+    print(f"응답: {response}")
