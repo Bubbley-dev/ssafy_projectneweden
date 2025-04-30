@@ -16,10 +16,10 @@ public class MovementController : MonoBehaviour
     // 이동 관련 변수들
     private List<Node> mCurrentPath;                                  // 현재 경로
     private int mCurrentPathIndex;                                    // 현재 경로 인덱스
-    private Vector2 mTargetPosition;                                  // 현재 목표 위치
+    private Vector3Int mCurrentTargetCell;                               // 현재 경로상 목표 셀
     private bool mIsMoving;                                           // 이동 중 여부
-    private Transform mCurrentTarget;                                 // 현재 목표물
-    private Vector2 mCurrentPoint;                                   // 현재 목표 위치
+    private Transform mTargetObject;                                  // 최종 목표 오브젝트
+    private Vector3Int mTargetCell;                                   // 최종 목표 셀
     private float mLastTargetSearchTime;                             // 마지막 목표물 탐색 시간
     private SpriteRenderer mSpriteRenderer;                          // 스프라이트 렌더러
     private NPCLog mNPCLog;
@@ -38,19 +38,19 @@ public class MovementController : MonoBehaviour
     // 매 프레임 업데이트
     private void Update()
     {
-        if (mCurrentPoint == null) return;
+        if (mTargetObject == null) return;
         // 일정 간격으로 목표물 탐색
         if (Time.time - mLastTargetSearchTime >= mTargetSearchInterval)
         {
             // 현재 목표물 저장
-            Vector2 previousPoint = mCurrentPoint;
-            FindTargetPosition();
+            Vector3Int previousCell = mTargetCell;
+            FindTargetCell();
             mLastTargetSearchTime = Time.time;
 
             // 목표 지점이 변경된 경우에만 경로 업데이트
-            if (previousPoint != mCurrentPoint)
+            if (previousCell != mTargetCell)
             {
-                Debug.Log($"{gameObject.name}의 목표물이 변경되어 경로를 업데이트합니다. 이전: {previousPoint}, 현재: {mCurrentPoint}");
+                Debug.Log($"{gameObject.name}의 목표물이 변경되어 경로를 업데이트합니다. 이전: {previousCell}, 현재: {mTargetCell}");
                 UpdatePath();
             }
         }
@@ -58,10 +58,10 @@ public class MovementController : MonoBehaviour
         if (!mIsMoving) return;
         
         // 목표 위치에 장애물이 있으면 최종 목표 위치 변경
-        if (IsObstacleInPoint())
+        if (IsObstacleInTargetCell())
         {
             Debug.Log($"{gameObject.name} 목표 위치에 장애물 감지, 최종 목표 위치 변경");
-            FindTargetPosition();
+            FindTargetCell();
         }
 
         // 정면 타일 감지 영역 내에 장애물 또는 NPC가 있으면 경로 재탐색
@@ -81,39 +81,39 @@ public class MovementController : MonoBehaviour
         mTargetName = _locationName;
         mIsMoving = true;
         mDestinationReachedEventFired = false;  // 새로운 이동 시작 시 플래그 초기화
-        FindTargetPosition();
+        FindTargetCell();
     }
 
     // 지정된 위치로 이동
-    // _targetPosition: 목표 위치
+    // _targetCell: 목표 위치
     // _onReached: 도착 시 콜백
-    public void MoveToPosition(Vector2 _targetPosition, System.Action _onReached = null)
+    public void MoveToCell(Vector3Int _targetCell, System.Action _onReached = null)
     {
-        mTargetPosition = _targetPosition;
+        mTargetCell = _targetCell;
         mIsMoving = true;
-        // PathFinder의 FindPath는 월드좌표(Vector2)만 받음
-        mCurrentPath = PathFinder.Instance.FindPath(transform.position, _targetPosition, this.gameObject);
+        // PathFinder의 FindPath는 셀좌표(Vector3Int)만 받음
+        mCurrentPath = PathFinder.Instance.FindPath(transform.position, mTargetCell, this.gameObject);
         if (mCurrentPath != null && mCurrentPath.Count > 0)
         {
             mCurrentPathIndex = 0;
-            // 첫 번째 경로 노드의 타일 중심으로 이동
-            mTargetPosition = TileManager.Instance.GroundTilemap.GetCellCenterWorld(new Vector3Int(mCurrentPath[0].x, mCurrentPath[0].y, 0));
             mIsMoving = true;
         }
         else
         {
-            Debug.LogWarning($"{gameObject.name}이(가) {_targetPosition}까지의 경로를 찾을 수 없습니다.");
+            Debug.LogWarning($"{gameObject.name}이(가) {_targetCell}까지의 경로를 찾을 수 없습니다.");
             mIsMoving = false;
             return;
         }
     }
 
     // 목표물을 찾고 이동을 시작하는 메서드
-    private void FindTargetPosition()
+    private void FindTargetCell()
     {
         if (string.IsNullOrEmpty(mTargetName)) return;
+
+        // 접근 가능한 조건에 맞는 가까운 오브젝트 찾기 로직 (임시 : 태그로 찾아서 이름 매칭)
         GameObject[] targets = GameObject.FindGameObjectsWithTag("Target");
-        Transform closestTarget = null;
+        Transform closestObject = null;
         float closestDistance = float.MaxValue;
         foreach (GameObject target in targets)
         {
@@ -123,33 +123,34 @@ public class MovementController : MonoBehaviour
                 if (distance < closestDistance)
                 {
                     closestDistance = distance;
-                    closestTarget = target.transform;
+                    closestObject = target.transform;
                 }
             }
         }
-        if (closestTarget != null)
+
+        // 가장 가까운 스탠딩셀 찾기
+        if (closestObject != null)
         {
-            if (mCurrentTarget == closestTarget) return;
-            mCurrentTarget = closestTarget;
-            TargetController targetController = mCurrentTarget.GetComponent<TargetController>();
+            mTargetObject = closestObject;
+            TargetController targetController = mTargetObject.GetComponent<TargetController>();
             if (targetController != null)
             {
-                List<Vector2> standingPoints = targetController.GetStandingPositions();
-                if (standingPoints.Count > 0)
+                List<Vector3Int> standingCells = targetController.GetStandingCells();
+                if (standingCells.Count > 0)
                 {
-                    Vector2 closestStandingPoint = standingPoints[0];
+                    Vector3Int closestStandingCell = standingCells[0];
                     float minPathCost = float.MaxValue;
-                    foreach (Vector2 point in standingPoints)
+                    foreach (Vector3Int cell in standingCells)
                     {
-                        float pathCost = PathFinder.Instance.CalculatePathCost(transform.position, point, this.gameObject);
+                        float pathCost = PathFinder.Instance.CalculatePathCost(TileManager.Instance.WorldToCell(transform.position), cell, gameObject);
                         if (pathCost < minPathCost)
                         {
                             minPathCost = pathCost;
-                            closestStandingPoint = point;
+                            closestStandingCell = cell;
                         }
                     }
-                    mCurrentPoint = closestStandingPoint;
-                    MoveToPosition(mCurrentPoint);
+                    mTargetCell = closestStandingCell;
+                    MoveToCell(closestStandingCell);
                 }
             }
         }
@@ -162,25 +163,25 @@ public class MovementController : MonoBehaviour
     // 현재 경로를 업데이트하는 메서드
     private void UpdatePath()
     {
-        if (mCurrentTarget == null) return;
-        TargetController targetController = mCurrentTarget.GetComponent<TargetController>();
+        if (mTargetObject == null) return;
+        TargetController targetController = mTargetObject.GetComponent<TargetController>();
         if (targetController != null)
         {
-            List<Vector2> standingPoints = targetController.GetStandingPositions();
-            if (standingPoints.Count > 0)
+            List<Vector3Int> standingCells = targetController.GetStandingCells();
+            if (standingCells.Count > 0)
             {
-                Vector2 closestStandingPoint = standingPoints[0];
+                Vector3Int closestStandingCell = standingCells[0];
                 float minPathCost = float.MaxValue;
-                foreach (Vector2 point in standingPoints)
+                foreach (Vector3Int cell in standingCells)
                 {
-                    float pathCost = PathFinder.Instance.CalculatePathCost(transform.position, point, this.gameObject);
+                    float pathCost = PathFinder.Instance.CalculatePathCost(TileManager.Instance.WorldToCell(transform.position), cell, this.gameObject);
                     if (pathCost < minPathCost)
                     {
                         minPathCost = pathCost;
-                        closestStandingPoint = point;
+                        closestStandingCell = cell;
                     }
                 }
-                MoveToPosition(closestStandingPoint);
+                MoveToCell(closestStandingCell);
             }
         }
     }
@@ -208,21 +209,18 @@ public class MovementController : MonoBehaviour
     // 이동 중인지 여부 반환
     public bool IsMoving => mIsMoving;
 
-    // 현재 목적지 이름 반환
-    public string CurrentDestination => mCurrentTarget != null ? mCurrentTarget.name : string.Empty;
-
     // 현재 타겟 이름 반환
     public string TargetName => mTargetName;
 
     // 기본 이동 로직
     private void MoveTowardTarget()
     {
-        if (mTargetPosition == null) return;
-        // 현재 위치를 Vector2로 변환
-        Vector2 currentPosition = new Vector2(transform.position.x, transform.position.y);
+        if (mTargetCell == null) return;
+        // 현재 위치를 cell로 변환
+        Vector3Int currentCell = TileManager.Instance.WorldToCell(transform.position);
 
         // 목표 방향 계산
-        Vector2 direction = (mTargetPosition - currentPosition).normalized;
+        Vector3Int direction = mTargetCell - currentCell;
         // 이동 (2D)
         Vector3 movement = new Vector3(direction.x, direction.y, 0) * mMoveSpeed * Time.deltaTime;
         transform.position += movement;
@@ -236,7 +234,7 @@ public class MovementController : MonoBehaviour
             mSpriteRenderer.flipX = false;
         }
         // 도착 확인
-        float distance = Vector2.Distance(currentPosition, mTargetPosition);
+        float distance = Vector2.Distance(transform.position, TileManager.Instance.GetCellCenterWorld(mTargetCell));
         if (distance <= mReachedDistance)
         {
             OnReachedDestination();
@@ -249,22 +247,22 @@ public class MovementController : MonoBehaviour
         // 현재 경로의 다음 지점으로 이동
         if (mCurrentPath != null && mCurrentPathIndex < mCurrentPath.Count - 1)
         {
-            mNPCLog.SetNPCLog($"{gameObject.name}이(가) 목적지({mCurrentTarget?.name})로 이동 중");
-            Debug.Log($"{gameObject.name}이(가) 목적지({mCurrentTarget?.name})로 이동 중");
+            mNPCLog.SetNPCLog($"{gameObject.name}이(가) 목적지({mTargetObject?.name})로 이동 중");
+            Debug.Log($"{gameObject.name}이(가) 목적지({mTargetObject?.name})로 이동 중");
             mCurrentPathIndex++;
-            mTargetPosition = TileManager.Instance.GroundTilemap.GetCellCenterWorld(new Vector3Int(mCurrentPath[mCurrentPathIndex].x, mCurrentPath[mCurrentPathIndex].y, 0));
+            mCurrentTargetCell = new Vector3Int(mCurrentPath[mCurrentPathIndex].x, mCurrentPath[mCurrentPathIndex].y, 0);
             mIsMoving = true;
         }
         else
         {
             mIsMoving = false;
-            transform.position = mTargetPosition;
-            mNPCLog.SetNPCLog($"{gameObject.name}이(가) 목적지({mCurrentTarget?.name})에 도착함");
-            Debug.Log($"{gameObject.name}이(가) 목적지({mCurrentTarget?.name})에 도착함");
-            mCurrentTarget = null;
+            transform.position = TileManager.Instance.GetCellCenterWorld(mCurrentTargetCell);
+            mNPCLog.SetNPCLog($"{gameObject.name}이(가) 목적지({mTargetObject?.name})에 도착함");
+            Debug.Log($"{gameObject.name}이(가) 목적지({mTargetObject?.name})에 도착함");
+            mTargetObject = null;
             mCurrentPath = null;
             mCurrentPathIndex = 0;
-            mTargetPosition = Vector2.zero;
+            mCurrentTargetCell = Vector3Int.zero;
             if (!mDestinationReachedEventFired)
             {
                 OnDestinationReached?.Invoke();
@@ -277,50 +275,26 @@ public class MovementController : MonoBehaviour
     private bool IsObstacleInFrontTiles()
     {
         // 이동 방향(혹은 바라보는 방향) 계산
-        Vector2 direction = mTargetPosition - (Vector2)transform.position;
+        Vector2 direction = (Vector2)TileManager.Instance.GetCellCenterWorld(mCurrentTargetCell) - (Vector2)transform.position;
         if (direction.sqrMagnitude < 0.01f) return false; // 방향이 없으면 감지 안 함
         direction.Normalize();
 
-        // 타일맵 참조
-        Tilemap groundTilemap = TileManager.Instance.GroundTilemap;
-
         // 현재 위치의 셀 좌표
-        Vector3Int currentCell = groundTilemap.WorldToCell(transform.position);
-
+        Vector3Int currentCell = TileManager.Instance.WorldToCell(transform.position);
         for (int i = 1; i <= mDetectionTileCount; i++)
         {
-            // 정면 방향으로 i칸 앞 셀 좌표 계산
             Vector3Int checkCell = currentCell + new Vector3Int(Mathf.RoundToInt(direction.x * i), Mathf.RoundToInt(direction.y * i), 0);
-            Vector3 checkWorldPos = groundTilemap.GetCellCenterWorld(checkCell);
-
-            // 해당 셀 중심에서 충돌체 감지
-            Collider2D[] colliders = Physics2D.OverlapCircleAll(checkWorldPos, 0.4f, TileManager.Instance.ObstacleLayerMask);
-            foreach (Collider2D collider in colliders)
-            {
-                if (collider.gameObject == mCurrentTarget?.gameObject)  // 목표물은 이벤트 발생하지 않음
-                    continue;
-                if (collider.gameObject == this.gameObject)  // 자기 자신은 이벤트 발생하지 않음
-                    continue;
-                // 감지된 오브젝트가 있으면 true 반환
+            if (TileManager.Instance.ExistObjectInCell(checkCell))
                 return true;
-            }
         }
         return false;
     }
 
-    private bool IsObstacleInPoint()
+    private bool IsObstacleInTargetCell()
     {
-        Vector3Int checkCell = TileManager.Instance.GroundTilemap.WorldToCell(mCurrentPoint);
-        Vector2 checkWorldPos = TileManager.Instance.GroundTilemap.GetCellCenterWorld(checkCell);
-        Collider2D[] colliders = Physics2D.OverlapCircleAll(checkWorldPos, 0.4f, TileManager.Instance.ObstacleLayerMask);
-        foreach (Collider2D collider in colliders)
-        {
-            if (collider.gameObject == mCurrentTarget?.gameObject)  // 목표물은 이벤트 발생하지 않음
-                continue;
-            if (collider.gameObject == this.gameObject)  // 자기 자신은 이벤트 발생하지 않음
-                continue;
+        Vector3Int checkCell = TileManager.Instance.WorldToCell(mTargetCell);
+        if (TileManager.Instance.TryGetTileInfo(checkCell, out TileManager.TileInfo tileInfo) && tileInfo.canMove)
             return true;
-        }
         return false;
     }
 
@@ -348,26 +322,26 @@ public class MovementController : MonoBehaviour
             }
 
             // 현재 목표 위치 표시
-            if (mTargetPosition != Vector2.zero)
+            if (mCurrentTargetCell != Vector3Int.zero)
             {
                 Gizmos.color = Color.green;
-                Gizmos.DrawSphere(new Vector3(mTargetPosition.x, mTargetPosition.y, 0), 0.3f);
+                Gizmos.DrawSphere(TileManager.Instance.GetCellCenterWorld(mCurrentTargetCell), 0.3f);
             }
         }
 
         // --- 정면 타일 감지 영역 시각화 ---
         if (TileManager.Instance != null && TileManager.Instance.GroundTilemap != null)
         {
-            Vector2 direction = mTargetPosition - (Vector2)transform.position;
+            Vector2 direction = (Vector2)TileManager.Instance.GetCellCenterWorld(mCurrentTargetCell) - (Vector2)transform.position;
             if (direction.sqrMagnitude >= 0.01f)
             {
                 direction.Normalize();
-                Vector3Int currentCell = TileManager.Instance.GroundTilemap.WorldToCell(transform.position);
+                Vector3Int currentCell = TileManager.Instance.WorldToCell(transform.position);
                 Gizmos.color = new Color(0, 0.5f, 1f, 0.3f); // 파란색(반투명)
                 for (int i = 1; i <= mDetectionTileCount; i++)
                 {
                     Vector3Int checkCell = currentCell + new Vector3Int(Mathf.RoundToInt(direction.x * i), Mathf.RoundToInt(direction.y * i), 0);
-                    Vector3 checkWorldPos = TileManager.Instance.GroundTilemap.GetCellCenterWorld(checkCell);
+                    Vector3 checkWorldPos = TileManager.Instance.GetCellCenterWorld(checkCell);
                     Gizmos.DrawWireCube(checkWorldPos, Vector3.one * 0.9f); // 셀 크기만큼 네모로 표시
                 }
             }

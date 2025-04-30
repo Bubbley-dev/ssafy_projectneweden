@@ -30,10 +30,10 @@ public class PathFinder : MonoBehaviour
     private GameObject mGameObject;
     private int mSizeX, mSizeY;                              // 맵 크기
     private Node[,] mNodeArray;                              // 노드 배열
-    private NodePriorityQueue mOpenList; // 열린 목록(우선순위 큐)
+    private NodePriorityQueue mOpenList;                    // 열린 목록(우선순위 큐)
     private List<Node> mClosedList;                          // 닫힌 목록
-    private Vector3Int mMapMinCell;                          // 타일맵 최소 셀
-    private Vector3Int mMapMaxCell;                          // 타일맵 최대 셀
+    private BoundsInt mMapBounds;
+    private bool mNodeArrayInitialized = false;
 
     private void Awake()
     {
@@ -46,13 +46,6 @@ public class PathFinder : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-    private void Start()
-    {
-        // 타일맵 범위 계산
-        mMapMinCell = TileManager.Instance.GroundTilemap.cellBounds.min;
-        mMapMaxCell = TileManager.Instance.GroundTilemap.cellBounds.max - Vector3Int.one; // max는 exclusive
-    }
-
     /// <summary>
     /// 시작점에서 목표점까지의 경로를 찾는 메서드 (타일맵 기준)
     /// </summary>
@@ -60,7 +53,7 @@ public class PathFinder : MonoBehaviour
     /// <param name="_targetPos">목표 위치(월드좌표)</param>
     /// <param name="_gameObject">경로를 찾을 게임 오브젝트</param>
     /// <returns>찾은 경로의 노드 리스트</returns>
-    public List<Node> FindPath(Vector2 _startPos, Vector2 _targetPos, GameObject _gameObject)
+    public List<Node> FindPath(Vector3 _startPos, Vector3 _targetPos, GameObject _gameObject)
     {
         mGameObject = _gameObject;
         if (TileManager.Instance == null)
@@ -69,38 +62,42 @@ public class PathFinder : MonoBehaviour
             return null;
         }
         // 월드좌표를 셀좌표로 변환
-        Vector3Int startCell = TileManager.Instance.GroundTilemap.WorldToCell(_startPos);
-        Vector3Int targetCell = TileManager.Instance.GroundTilemap.WorldToCell(_targetPos);
+        Vector3Int startCell = TileManager.Instance.WorldToCell(_startPos);
+        Vector3Int targetCell = TileManager.Instance.WorldToCell(_targetPos);
         // 맵 범위 체크
         if (!IsPositionInMap(startCell) || !IsPositionInMap(targetCell))
         {
-            Debug.LogError($"시작점({startCell}) 또는 목표점({targetCell})이 맵 범위를 벗어났습니다. 맵: {mMapMinCell} ~ {mMapMaxCell}");
+            Debug.LogError($"시작점({startCell}) 또는 목표점({targetCell})이 맵 범위를 벗어났습니다. 맵: {mMapBounds.min} ~ {mMapBounds.max}");
             return null;
         }
-        InitializeNodeArray();
-        Node startNode = mNodeArray[startCell.x - mMapMinCell.x, startCell.y - mMapMinCell.y];
-        Node targetNode = mNodeArray[targetCell.x - mMapMinCell.x, targetCell.y - mMapMinCell.y];
-
-        // 시작점이나 목표점이 벽인지 확인
-        if (startNode.isWall)
+        if (!mNodeArrayInitialized)
         {
-            Debug.LogError($"시작점이 벽입니다. 위치: {startCell}");
+            InitializeNodeArray();
+            mNodeArrayInitialized = true;
+        }
+        Node startNode = mNodeArray[startCell.x - mMapBounds.min.x, startCell.y - mMapBounds.min.y];
+        Node targetNode = mNodeArray[targetCell.x - mMapBounds.min.x, targetCell.y - mMapBounds.min.y];
+
+        // 시작점이나 목표점이 이동 불가 셀인지 확인 (실시간 TileManager 참조)
+        if (!TileManager.Instance.TryGetTileInfo(startCell, out TileManager.TileInfo infoStart) || !infoStart.canMove)
+        {
+            Debug.LogError($"시작점이 이동 불가 셀입니다. 위치: {startCell}");
             return null;
         }
-        if (targetNode.isWall)
+        if (!TileManager.Instance.TryGetTileInfo(targetCell, out TileManager.TileInfo infoTarget) || !infoTarget.canMove)
         {
-            Debug.Log($"목표점이 벽입니다. 위치: {targetCell}");
+            Debug.Log($"목표점이 이동 불가 셀입니다. 위치: {targetCell}");
             return null;
         }
 
-        mOpenList = new NodePriorityQueue();
+        mOpenList = new NodePriorityQueue();  // 오픈리스트 초기화
         mOpenList.Enqueue(startNode);
-        mClosedList = new List<Node>();
+        mClosedList = new List<Node>();  // 클로즈드 리스트 초기화
         List<Node> finalPath = new List<Node>();
 
         while (mOpenList.Count > 0)
         {
-            Node currentNode = mOpenList.Dequeue(); // F값이 가장 낮은 노드 pop
+            Node currentNode = mOpenList.Dequeue();
             mClosedList.Add(currentNode);
 
             if (currentNode == targetNode)
@@ -119,46 +116,29 @@ public class PathFinder : MonoBehaviour
     // 주어진 셀 좌표가 맵 범위 내에 있는지 확인 (타일맵 기준)
     private bool IsPositionInMap(Vector3Int cell)
     {
-        return cell.x >= mMapMinCell.x && cell.x <= mMapMaxCell.x &&
-               cell.y >= mMapMinCell.y && cell.y <= mMapMaxCell.y &&
-               TileManager.Instance.GroundTilemap.HasTile(cell);
+        return mMapBounds.Contains(cell) && TileManager.Instance.GroundTilemap.HasTile(cell);
     }
 
-    // 노드 배열을 타일맵 기준으로 초기화
+    // 노드 배열을 타일맵 기준으로 한 번만 초기화
     private void InitializeNodeArray()
     {
-        mSizeX = mMapMaxCell.x - mMapMinCell.x + 1;
-        mSizeY = mMapMaxCell.y - mMapMinCell.y + 1;
+        mSizeX = mMapBounds.size.x;
+        mSizeY = mMapBounds.size.y;
         mNodeArray = new Node[mSizeX, mSizeY];
         for (int i = 0; i < mSizeX; i++)
         {
             for (int j = 0; j < mSizeY; j++)
             {
-                Vector3Int cell = new Vector3Int(i + mMapMinCell.x, j + mMapMinCell.y, 0);
-                bool isWall = CheckForWall(cell);
-                mNodeArray[i, j] = new Node(isWall, cell.x, cell.y);
+                Vector3Int cell = new Vector3Int(mMapBounds.min.x + i, mMapBounds.min.y + j, 0);
+                mNodeArray[i, j] = new Node(cell.x, cell.y);
             }
         }
     }
 
-    // 해당 셀에 벽이 있는지 확인 (타일맵 기준)
+    // 해당 셀에 이동할 수 있는지 확인
     private bool CheckForWall(Vector3Int cell)
     {
-        if (!TileManager.Instance.GroundTilemap.HasTile(cell)) return true; // 타일이 없으면 벽으로 간주
-        Vector2 checkPos = TileManager.Instance.GroundTilemap.GetCellCenterWorld(cell);
-        Collider2D[] colliders = Physics2D.OverlapCircleAll(checkPos, 0.4f, TileManager.Instance.ObstacleLayerMask);
-        if (colliders.Length > 0)
-        {
-            foreach (Collider2D collider in colliders)
-            {
-                if (collider.gameObject == mGameObject) continue;
-                if (((1 << collider.gameObject.layer) & TileManager.Instance.ObstacleLayerMask) != 0)
-                {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return !TileManager.Instance.TryGetTileInfo(cell, out TileManager.TileInfo info) || !info.canMove;
     }
 
     // 현재 노드의 이웃 노드들을 탐색하는 메서드
@@ -173,52 +153,35 @@ public class PathFinder : MonoBehaviour
             Vector3Int.right  // 오른쪽 셀
         };
 
-        // 각 방향별로 이웃 셀을 확인
         foreach (Vector3Int dir in directions)
         {
-            // 이웃 셀 좌표 계산
             Vector3Int neighborCell = new Vector3Int(_currentNode.x, _currentNode.y, 0) + dir;
-
-            // 타일맵 범위 및 타일 존재 여부 확인
             if (!IsPositionInMap(neighborCell)) continue;
+            // 실시간으로 이동 가능 여부 체크
+            if (!TileManager.Instance.TryGetTileInfo(neighborCell, out TileManager.TileInfo info) || !info.canMove) continue;
+            Node neighborNode = mNodeArray[neighborCell.x - mMapBounds.min.x, neighborCell.y - mMapBounds.min.y];
+            if (mClosedList.Contains(neighborNode)) continue;
 
-            // 노드 배열 인덱스 변환
-            Node neighborNode = mNodeArray[neighborCell.x - mMapMinCell.x, neighborCell.y - mMapMinCell.y];
-
-            // 이미 닫힌 목록에 있거나 벽(또는 장애물)이면 스킵
-            if (mClosedList.Contains(neighborNode) || neighborNode.isWall) continue;
-
-            // 기본 이동 비용
             int moveCost = _currentNode.G + 10;
-
-            // 방향 전환 패널티 계산
             if (_currentNode.ParentNode != null)
             {
-                Vector2Int currentDirection = new Vector2Int(dir.x, dir.y); // 현재 이동 방향
-                Vector2Int previousDirection = _currentNode.Direction;      // 이전 이동 방향
-
-                // 이전 방향과 다르면 패널티 적용
+                Vector2Int currentDirection = new Vector2Int(dir.x, dir.y);
+                Vector2Int previousDirection = _currentNode.Direction;
                 if (currentDirection != previousDirection)
                 {
                     if (currentDirection == -previousDirection)
-                        moveCost += 30; // 180도 회전(U턴) 패널티
+                        moveCost += 30;
                     else
-                        moveCost += 15; // 90도 회전 패널티
+                        moveCost += 15;
                 }
             }
-
-            // 휴리스틱(맨해튼 거리)
             int heuristic = Mathf.Abs(neighborNode.x - _targetNode.x) + Mathf.Abs(neighborNode.y - _targetNode.y);
-
-            // 더 나은 경로를 찾았거나 아직 열린 목록에 없는 경우
             if (!mOpenList.Contains(neighborNode) || moveCost < neighborNode.G)
             {
-                neighborNode.G = moveCost;                              // 실제 이동 비용
-                neighborNode.H = heuristic * 10;                        // 휴리스틱(예상 비용)
-                neighborNode.ParentNode = _currentNode;                 // 부모 노드 갱신
-                neighborNode.Direction = new Vector2Int(dir.x, dir.y);  // 이동 방향 저장
-
-                // 열린 목록에 추가
+                neighborNode.G = moveCost;
+                neighborNode.H = heuristic * 10;
+                neighborNode.ParentNode = _currentNode;
+                neighborNode.Direction = new Vector2Int(dir.x, dir.y);
                 if (!mOpenList.Contains(neighborNode))
                 {
                     mOpenList.Enqueue(neighborNode);
@@ -284,20 +247,47 @@ public class PathFinder : MonoBehaviour
     // 두 노드 사이에 직선 경로가 있는지 확인하는 메서드
     private bool HasDirectPath(Node _start, Node _end)
     {
-        Vector2 startPos = new Vector2(_start.x + 0.5f, _start.y + 0.5f);
-        Vector2 endPos = new Vector2(_end.x + 0.5f, _end.y + 0.5f);
-        Vector2 direction = (endPos - startPos).normalized;
-        float distance = Vector2.Distance(startPos, endPos);
+        int x0 = _start.x;
+        int y0 = _start.y;
+        int x1 = _end.x;
+        int y1 = _end.y;
 
-        RaycastHit2D hit = Physics2D.Raycast(startPos, direction, distance, TileManager.Instance.ObstacleLayerMask);
-        return hit.collider == null;
+        // Bresenham's Line Algorithm (정수 좌표 직선 순회)
+        int dx = Mathf.Abs(x1 - x0);
+        int dy = Mathf.Abs(y1 - y0);
+        int sx = x0 < x1 ? 1 : -1;
+        int sy = y0 < y1 ? 1 : -1;
+        int err = dx - dy;
+
+        while (true)
+        {
+            Vector3Int cell = new Vector3Int(x0, y0, 0);
+            if (!TileManager.Instance.TryGetTileInfo(cell, out TileManager.TileInfo info) || !info.canMove)
+                return false;
+
+            if (x0 == x1 && y0 == y1)
+                break;
+
+            int e2 = 2 * err;
+            if (e2 > -dy)
+            {
+                err -= dy;
+                x0 += sx;
+            }
+            if (e2 < dx)
+            {
+                err += dx;
+                y0 += sy;
+            }
+        }
+        return true;
     }
 
     // 두 지점 사이의 경로 비용을 계산하는 메서드
-    public float CalculatePathCost(Vector2 startWorldPos, Vector2 targetWorldPos, GameObject _gameObject)
+    public float CalculatePathCost(Vector3Int start, Vector3Int target, GameObject _gameObject)
     {
         // FindPath로 경로를 구함
-        List<Node> path = FindPath(startWorldPos, targetWorldPos, _gameObject);
+        List<Node> path = FindPath(start, target, _gameObject);
         if (path == null || path.Count == 0)
             return float.MaxValue; // 경로가 없으면 최대값 반환
 
@@ -321,7 +311,7 @@ public class PathFinder : MonoBehaviour
                 Vector2 pos = new Vector2(node.x + 0.5f, node.y + 0.5f);
 
                 // 벽은 빨간색으로 표시
-                if (node.isWall)
+                if (CheckForWall(new Vector3Int(node.x, node.y, 0)))
                 {
                     Gizmos.color = Color.red;
                     Gizmos.DrawCube(pos, Vector3.one * 0.8f);

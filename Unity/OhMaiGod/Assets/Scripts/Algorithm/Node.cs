@@ -4,7 +4,6 @@ using UnityEngine;
 [System.Serializable]
 public class Node
 {
-    public bool isWall;           // 벽 여부
     public Node ParentNode;       // 이전 노드
 
     // G : 시작점으로부터의 실제 이동 거리
@@ -13,16 +12,12 @@ public class Node
     public int x, y, G, H;        // x, y: 노드의 좌표, G: 시작점까지 비용, H: 목표점까지 예상 비용
     public int F { get { return G + H; } }
     
-    // 이동 방향 정보 추가
+    // 이동 방향 정보
     public Vector2Int Direction { get; set; }    // 현재 노드까지의 이동 방향
 
-    // 노드 생성자
-    // _isWall: 벽 여부
-    // _x: x 좌표
-    // _y: y 좌표
-    public Node(bool _isWall, int _x, int _y)
+    // 노드 생성자 (좌표만)
+    public Node(int _x, int _y)
     {
-        isWall = _isWall;
         x = _x;
         y = _y;
         G = 0;
