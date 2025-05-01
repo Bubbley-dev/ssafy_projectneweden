@@ -32,6 +32,7 @@ public class TargetController : MonoBehaviour
         if (!TileManager.Instance.mIsInitialized) return;
         if (!mIsInitialized)
         {
+            TileManager.Instance.RegisterObject(gameObject, mCanMove);
             InitializeStandingPoints();
             mIsInitialized = true;
         }
