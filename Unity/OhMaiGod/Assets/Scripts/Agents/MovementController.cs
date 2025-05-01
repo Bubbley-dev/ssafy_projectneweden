@@ -92,7 +92,7 @@ public class MovementController : MonoBehaviour
         mTargetCell = _targetCell;
         mIsMoving = true;
         // PathFinder의 FindPath는 셀좌표(Vector3Int)만 받음
-        mCurrentPath = PathFinder.Instance.FindPath(transform.position, mTargetCell, this.gameObject);
+        mCurrentPath = PathFinder.Instance.FindPath(TileManager.Instance.WorldToCell(transform.position), mTargetCell, this.gameObject);
         if (mCurrentPath != null && mCurrentPath.Count > 0)
         {
             mCurrentPathIndex = 0;
@@ -142,7 +142,7 @@ public class MovementController : MonoBehaviour
                     float minPathCost = float.MaxValue;
                     foreach (Vector3Int cell in standingCells)
                     {
-                        float pathCost = PathFinder.Instance.CalculatePathCost(TileManager.Instance.WorldToCell(transform.position), cell, gameObject);
+                        float pathCost = PathFinder.Instance.CalculatePathCost(TileManager.Instance.WorldToCell(transform.position), cell, this.gameObject);
                         if (pathCost < minPathCost)
                         {
                             minPathCost = pathCost;
@@ -215,29 +215,46 @@ public class MovementController : MonoBehaviour
     // 기본 이동 로직
     private void MoveTowardTarget()
     {
-        if (mTargetCell == null) return;
-        // 현재 위치를 cell로 변환
-        Vector3Int currentCell = TileManager.Instance.WorldToCell(transform.position);
+        // 경로가 없거나, 인덱스가 범위를 벗어나면 리턴
+        if (mCurrentPath == null || mCurrentPathIndex >= mCurrentPath.Count) return;
 
-        // 목표 방향 계산
-        Vector3Int direction = mTargetCell - currentCell;
-        // 이동 (2D)
-        Vector3 movement = new Vector3(direction.x, direction.y, 0) * mMoveSpeed * Time.deltaTime;
-        transform.position += movement;
+        // 현재 목표 셀(경로의 다음 노드)
+        Node nextNode = mCurrentPath[mCurrentPathIndex];
+        Vector3Int nextCell = new Vector3Int(nextNode.x, nextNode.y, 0);
+        Vector3 nextCellWorldPos = TileManager.Instance.GetCellCenterWorld(nextCell);
+
+        // 방향 및 이동량 계산
+        Vector3 direction = (nextCellWorldPos - transform.position).normalized;
+        float distance = Vector3.Distance(transform.position, nextCellWorldPos);
+        float moveStep = mMoveSpeed * Time.deltaTime;
+
+        // 셀 중심까지 이동
+        if (distance <= moveStep)
+        {
+            // 셀 중심에 정확히 위치 고정
+            transform.position = nextCellWorldPos;
+            mCurrentTargetCell = nextCell;
+            mCurrentPathIndex++;
+            if (mCurrentPathIndex >= mCurrentPath.Count)
+            {
+                // 목적지 도착 처리
+                OnReachedDestination();
+            }
+        }
+        else
+        {
+            transform.position += direction * moveStep;
+            mCurrentTargetCell = nextCell;
+        }
+
         // 이동방향이 왼쪽이면 x축 플립
         if (direction.x < 0)
         {
             mSpriteRenderer.flipX = true;
         }
-        else
+        else if (direction.x > 0)
         {
             mSpriteRenderer.flipX = false;
-        }
-        // 도착 확인
-        float distance = Vector2.Distance(transform.position, TileManager.Instance.GetCellCenterWorld(mTargetCell));
-        if (distance <= mReachedDistance)
-        {
-            OnReachedDestination();
         }
     }
 
@@ -284,7 +301,7 @@ public class MovementController : MonoBehaviour
         for (int i = 1; i <= mDetectionTileCount; i++)
         {
             Vector3Int checkCell = currentCell + new Vector3Int(Mathf.RoundToInt(direction.x * i), Mathf.RoundToInt(direction.y * i), 0);
-            if (TileManager.Instance.ExistObjectInCell(checkCell))
+            if (TileManager.Instance.TryGetTileInfo(checkCell, out TileManager.TileInfo tileInfo) && !tileInfo.canMove)
                 return true;
         }
         return false;
@@ -293,7 +310,7 @@ public class MovementController : MonoBehaviour
     private bool IsObstacleInTargetCell()
     {
         Vector3Int checkCell = TileManager.Instance.WorldToCell(mTargetCell);
-        if (TileManager.Instance.TryGetTileInfo(checkCell, out TileManager.TileInfo tileInfo) && tileInfo.canMove)
+        if (TileManager.Instance.TryGetTileInfo(checkCell, out TileManager.TileInfo tileInfo) && !tileInfo.canMove)
             return true;
         return false;
     }

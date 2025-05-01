@@ -23,6 +23,9 @@ public class TileManager : MonoBehaviour
     [SerializeField] private LayerMask mObjectLayerMask;      // 오브젝트 레이어 마스크
     [SerializeField] private LayerMask mNPCLayerMask;         // NPC 레이어 마스크
 
+    [Header("Debug")]
+    [SerializeField] private bool mShowDebug = false;
+
     private Dictionary<Vector3Int, TileInfo> mTilemapInfo = new(); // 타일맵 정보
     
     public bool mIsInitialized = false;
@@ -105,15 +108,15 @@ public class TileManager : MonoBehaviour
     // 오브젝트의 Bounds를 얻는 함수 (Collider2D > Renderer > transform.position)
     private Bounds GetObjectBounds(GameObject obj)
     {
-        SpriteRenderer spr = obj.GetComponent<SpriteRenderer>();
-        if (spr != null)
-        {
-            return spr.bounds;
-        }
         Collider2D col = obj.GetComponent<Collider2D>();
         if (col != null)
         {
             return col.bounds;
+        }
+        SpriteRenderer spr = obj.GetComponent<SpriteRenderer>();
+        if (spr != null)
+        {
+            return spr.bounds;
         }
         // 컴포넌트가 없으면 1x1 크기로 처리
         return new Bounds(obj.transform.position, Vector3.one);
@@ -128,7 +131,7 @@ public class TileManager : MonoBehaviour
         {
             if (mTilemapInfo.TryGetValue(cell, out TileInfo info))
             {
-                Debug.Log($"셀 {cell}에 오브젝트 {obj.name} 등록");
+                if (mShowDebug) Debug.Log($"셀 {cell}에 오브젝트 {obj.name} 등록");
                 if (info.objects == null)
                     info.objects = new List<GameObject>();
                 if (!info.objects.Contains(obj))
@@ -137,7 +140,7 @@ public class TileManager : MonoBehaviour
                 mTilemapInfo[cell] = info;
             }
         }
-        Debug.Log($"오브젝트 등록: {obj.name}");
+        if (mShowDebug) Debug.Log($"오브젝트 등록: {obj.name}");
     }
 
     // 오브젝트를 차지하는 셀에서 자동 해제
@@ -153,7 +156,7 @@ public class TileManager : MonoBehaviour
                 mTilemapInfo[cell] = info;
             }
         }
-        Debug.Log($"오브젝트 삭제: {obj.name}");
+        if (mShowDebug) Debug.Log($"오브젝트 삭제: {obj.name}");
     }
 
     // 오브젝트의 월드 바운드로부터 차지하는 셀 목록 반환
@@ -163,7 +166,7 @@ public class TileManager : MonoBehaviour
         Vector3Int minCell = mGroundTilemap.WorldToCell(bounds.min);
         Vector3Int maxCell = mGroundTilemap.WorldToCell(bounds.max);
 
-        Debug.Log($"[GetOccupiedCells] bounds: {bounds}, minCell: {minCell}, maxCell: {maxCell}");
+        if (mShowDebug) Debug.Log($"[GetOccupiedCells] bounds: {bounds}, minCell: {minCell}, maxCell: {maxCell}");
 
         for (int x = minCell.x; x <= maxCell.x; x++)
         {
@@ -173,15 +176,15 @@ public class TileManager : MonoBehaviour
                 if (mTilemapInfo.ContainsKey(cell))
                 {
                     cells.Add(cell);
-                    Debug.Log($"[GetOccupiedCells] 포함: {cell}");
+                    if (mShowDebug) Debug.Log($"[GetOccupiedCells] 포함: {cell}");
                 }
                 else
                 {
-                    Debug.LogWarning($"[GetOccupiedCells] 셀 {cell}은(는) mTilemapInfo에 없음! (GroundTilemap에 타일이 없음)");
+                    if (mShowDebug) Debug.LogWarning($"[GetOccupiedCells] 셀 {cell}은(는) mTilemapInfo에 없음! (GroundTilemap에 타일이 없음)");
                 }
             }
         }
-        if (cells.Count == 0) Debug.LogWarning($"[GetOccupiedCells] 차지하는 셀이 하나도 없습니다!");
+        if (cells.Count == 0 && mShowDebug) Debug.LogWarning($"[GetOccupiedCells] 차지하는 셀이 하나도 없습니다!");
         return cells;
     }
 
@@ -202,6 +205,7 @@ public class TileManager : MonoBehaviour
 
     private void OnDrawGizmos()
     {
+        if (!mShowDebug) return;
         Gizmos.color = Color.green;
         foreach (var cell in mTilemapInfo)
         {

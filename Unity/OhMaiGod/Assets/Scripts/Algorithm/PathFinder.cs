@@ -28,12 +28,10 @@ public class PathFinder : MonoBehaviour
     }
 
     private GameObject mGameObject;
-    private int mSizeX, mSizeY;                              // 맵 크기
-    private Node[,] mNodeArray;                              // 노드 배열
+    private Dictionary<Vector3Int, Node> mNodeDict; // 셀 좌표 기반 노드 딕셔너리
     private NodePriorityQueue mOpenList;                    // 열린 목록(우선순위 큐)
     private List<Node> mClosedList;                          // 닫힌 목록
-    private BoundsInt mMapBounds;
-    private bool mNodeArrayInitialized = false;
+    private bool mNodeDictInitialized = false; // 노드 딕셔너리 초기화 여부
 
     private void Awake()
     {
@@ -46,14 +44,24 @@ public class PathFinder : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
+    private void Update()
+    {
+        if (!TileManager.Instance.mIsInitialized) return;
+        if (!mNodeDictInitialized)
+        {
+            InitializeNodeDict();
+            mNodeDictInitialized = true;
+        }
+    }
+
     /// <summary>
     /// 시작점에서 목표점까지의 경로를 찾는 메서드 (타일맵 기준)
     /// </summary>
-    /// <param name="_startPos">시작 위치(월드좌표)</param>
-    /// <param name="_targetPos">목표 위치(월드좌표)</param>
+    /// <param name="_startCell">시작 셀</param>
+    /// <param name="_targetCell">목표 셀</param>
     /// <param name="_gameObject">경로를 찾을 게임 오브젝트</param>
     /// <returns>찾은 경로의 노드 리스트</returns>
-    public List<Node> FindPath(Vector3 _startPos, Vector3 _targetPos, GameObject _gameObject)
+    public List<Node> FindPath(Vector3Int _startCell, Vector3Int _targetCell, GameObject _gameObject)
     {
         mGameObject = _gameObject;
         if (TileManager.Instance == null)
@@ -61,32 +69,33 @@ public class PathFinder : MonoBehaviour
             Debug.LogError("TileManager에 바닥 타일맵이 할당되지 않았습니다!", this);
             return null;
         }
-        // 월드좌표를 셀좌표로 변환
-        Vector3Int startCell = TileManager.Instance.WorldToCell(_startPos);
-        Vector3Int targetCell = TileManager.Instance.WorldToCell(_targetPos);
-        // 맵 범위 체크
-        if (!IsPositionInMap(startCell) || !IsPositionInMap(targetCell))
+
+        if (!mNodeDictInitialized)
         {
-            Debug.LogError($"시작점({startCell}) 또는 목표점({targetCell})이 맵 범위를 벗어났습니다. 맵: {mMapBounds.min} ~ {mMapBounds.max}");
+            Debug.LogError("노드 딕셔너리가 초기화되지 않았습니다!");
             return null;
         }
-        if (!mNodeArrayInitialized)
+
+        if (!mNodeDict.TryGetValue(_startCell, out Node startNode))
         {
-            InitializeNodeArray();
-            mNodeArrayInitialized = true;
+            Debug.LogError($"시작 셀에 노드가 없습니다: {_startCell}");
+            return null;
         }
-        Node startNode = mNodeArray[startCell.x - mMapBounds.min.x, startCell.y - mMapBounds.min.y];
-        Node targetNode = mNodeArray[targetCell.x - mMapBounds.min.x, targetCell.y - mMapBounds.min.y];
+        if (!mNodeDict.TryGetValue(_targetCell, out Node targetNode))
+        {
+            Debug.LogError($"목표 셀에 노드가 없습니다: {_targetCell}");
+            return null;
+        }
 
         // 시작점이나 목표점이 이동 불가 셀인지 확인 (실시간 TileManager 참조)
-        if (!TileManager.Instance.TryGetTileInfo(startCell, out TileManager.TileInfo infoStart) || !infoStart.canMove)
+        if (!TileManager.Instance.TryGetTileInfo(_startCell, out TileManager.TileInfo infoStart) || !infoStart.canMove)
         {
-            Debug.LogError($"시작점이 이동 불가 셀입니다. 위치: {startCell}");
+            Debug.LogError($"시작점이 이동 불가 셀입니다. 위치: {_startCell}");
             return null;
         }
-        if (!TileManager.Instance.TryGetTileInfo(targetCell, out TileManager.TileInfo infoTarget) || !infoTarget.canMove)
+        if (!TileManager.Instance.TryGetTileInfo(_targetCell, out TileManager.TileInfo infoTarget) || !infoTarget.canMove)
         {
-            Debug.Log($"목표점이 이동 불가 셀입니다. 위치: {targetCell}");
+            Debug.Log($"목표점이 이동 불가 셀입니다. 위치: {_targetCell}");
             return null;
         }
 
@@ -109,28 +118,19 @@ public class PathFinder : MonoBehaviour
             ExploreNeighbors(currentNode, targetNode);
         }
 
-        Debug.LogWarning($"경로를 찾을 수 없습니다. 시작점: {startCell}, 목표점: {targetCell}");
+        Debug.LogWarning($"경로를 찾을 수 없습니다. 시작점: {_startCell}, 목표점: {_targetCell}");
         return null;
     }
 
-    // 주어진 셀 좌표가 맵 범위 내에 있는지 확인 (타일맵 기준)
-    private bool IsPositionInMap(Vector3Int cell)
+    // 노드 딕셔너리를 타일매니저의 실제 타일 셀 기준으로 초기화
+    private void InitializeNodeDict()
     {
-        return mMapBounds.Contains(cell) && TileManager.Instance.GroundTilemap.HasTile(cell);
-    }
-
-    // 노드 배열을 타일맵 기준으로 한 번만 초기화
-    private void InitializeNodeArray()
-    {
-        mSizeX = mMapBounds.size.x;
-        mSizeY = mMapBounds.size.y;
-        mNodeArray = new Node[mSizeX, mSizeY];
-        for (int i = 0; i < mSizeX; i++)
+        mNodeDict = new Dictionary<Vector3Int, Node>();
+        foreach (var cell in TileManager.Instance.GroundTilemap.cellBounds.allPositionsWithin)
         {
-            for (int j = 0; j < mSizeY; j++)
+            if (TileManager.Instance.TryGetTileInfo(cell, out _))
             {
-                Vector3Int cell = new Vector3Int(mMapBounds.min.x + i, mMapBounds.min.y + j, 0);
-                mNodeArray[i, j] = new Node(cell.x, cell.y);
+                mNodeDict[cell] = new Node(cell.x, cell.y);
             }
         }
     }
@@ -156,10 +156,10 @@ public class PathFinder : MonoBehaviour
         foreach (Vector3Int dir in directions)
         {
             Vector3Int neighborCell = new Vector3Int(_currentNode.x, _currentNode.y, 0) + dir;
-            if (!IsPositionInMap(neighborCell)) continue;
+            if (!mNodeDict.ContainsKey(neighborCell)) continue; // 실제 노드가 있는 셀만 탐색
             // 실시간으로 이동 가능 여부 체크
             if (!TileManager.Instance.TryGetTileInfo(neighborCell, out TileManager.TileInfo info) || !info.canMove) continue;
-            Node neighborNode = mNodeArray[neighborCell.x - mMapBounds.min.x, neighborCell.y - mMapBounds.min.y];
+            Node neighborNode = mNodeDict[neighborCell];
             if (mClosedList.Contains(neighborNode)) continue;
 
             int moveCost = _currentNode.G + 10;
@@ -284,10 +284,10 @@ public class PathFinder : MonoBehaviour
     }
 
     // 두 지점 사이의 경로 비용을 계산하는 메서드
-    public float CalculatePathCost(Vector3Int start, Vector3Int target, GameObject _gameObject)
+    public float CalculatePathCost(Vector3Int _startCell, Vector3Int _targetCell, GameObject _gameObject)
     {
         // FindPath로 경로를 구함
-        List<Node> path = FindPath(start, target, _gameObject);
+        List<Node> path = FindPath(_startCell, _targetCell, _gameObject);
         if (path == null || path.Count == 0)
             return float.MaxValue; // 경로가 없으면 최대값 반환
 
@@ -298,47 +298,43 @@ public class PathFinder : MonoBehaviour
     // 디버그용 기즈모를 그리는 메서드
     private void OnDrawGizmos()
     {
-        if (mNodeArray == null) return;
+        if (mNodeDict == null) return;
         if (!mShowDebug) return;
 
-        // 모든 노드 표시
-        for (int x = 0; x < mSizeX; x++)
+        // 모든 노드 표시 (타일이 있는 셀만)
+        foreach (var pair in mNodeDict)
         {
-            for (int y = 0; y < mSizeY; y++)
+            Node node = pair.Value;
+            Vector2 pos = new Vector2(node.x + 0.5f, node.y + 0.5f);
+
+            // 벽은 빨간색으로 표시
+            if (CheckForWall(new Vector3Int(node.x, node.y, 0)))
             {
-                Node node = mNodeArray[x, y];
-                // 타일의 중심 좌표로 표시
-                Vector2 pos = new Vector2(node.x + 0.5f, node.y + 0.5f);
-
-                // 벽은 빨간색으로 표시
-                if (CheckForWall(new Vector3Int(node.x, node.y, 0)))
-                {
-                    Gizmos.color = Color.red;
-                    Gizmos.DrawCube(pos, Vector3.one * 0.8f);
-                }
-                // 열린 리스트의 노드는 초록색으로 표시
-                else if (mOpenList != null && mOpenList.Contains(node))
-                {
-                    Gizmos.color = Color.green;
-                    Gizmos.DrawWireCube(pos, Vector3.one * 0.8f);
-                }
-                // 닫힌 리스트의 노드는 파란색으로 표시
-                else if (mClosedList != null && mClosedList.Contains(node))
-                {
-                    Gizmos.color = Color.blue;
-                    Gizmos.DrawWireCube(pos, Vector3.one * 0.8f);
-                }
-                // 그 외의 노드는 회색으로 표시
-                else
-                {
-                    Gizmos.color = Color.gray;
-                    Gizmos.DrawWireCube(pos, Vector3.one * 0.8f);
-                }
-
-                // 타일 중심점 표시
-                Gizmos.color = Color.white;
-                Gizmos.DrawSphere(pos, 0.05f);
+                Gizmos.color = Color.red;
+                Gizmos.DrawCube(pos, Vector3.one * 0.8f);
             }
+            // 열린 리스트의 노드는 초록색으로 표시
+            else if (mOpenList != null && mOpenList.Contains(node))
+            {
+                Gizmos.color = Color.green;
+                Gizmos.DrawWireCube(pos, Vector3.one * 0.8f);
+            }
+            // 닫힌 리스트의 노드는 파란색으로 표시
+            else if (mClosedList != null && mClosedList.Contains(node))
+            {
+                Gizmos.color = Color.blue;
+                Gizmos.DrawWireCube(pos, Vector3.one * 0.8f);
+            }
+            // 그 외의 노드는 회색으로 표시
+            else
+            {
+                Gizmos.color = Color.gray;
+                Gizmos.DrawWireCube(pos, Vector3.one * 0.8f);
+            }
+
+            // 타일 중심점 표시
+            Gizmos.color = Color.white;
+            Gizmos.DrawSphere(pos, 0.05f);
         }
     }
 }
