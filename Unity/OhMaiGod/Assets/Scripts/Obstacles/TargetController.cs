@@ -11,7 +11,7 @@ public class TargetController : MonoBehaviour
     private Collider2D mTargetCollider;                         // 타겟의 콜라이더
     private List<Vector3Int> mOccupiedCells;                 // 타겟이 차지하는 셀 목록
     private List<Vector3Int> mStandingCells;                  // 서있을 수 있는 셀 목록
-    private Vector3 mTargetPosition;                          // 타겟의 위치
+    private bool mIsInitialized = false;
 
     // 초기화
     private void Awake() // Start 대신 Awake 사용 고려 (Collider 참조 등)
@@ -30,10 +30,10 @@ public class TargetController : MonoBehaviour
     private void Update()
     {
         if (!TileManager.Instance.mIsInitialized) return;
-        if (mTargetPosition != transform.position)
+        if (!mIsInitialized)
         {
-            mTargetPosition = transform.position;
             InitializeStandingPoints();
+            mIsInitialized = true;
         }
     }
 
@@ -48,6 +48,7 @@ public class TargetController : MonoBehaviour
     // 기존 서있는 지점들 제거
     private void ClearStandingCells()
     {
+        TileManager.Instance.UnregisterObject(gameObject);
         mStandingCells.Clear();
     }
 

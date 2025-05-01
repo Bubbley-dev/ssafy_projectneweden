@@ -89,12 +89,14 @@ public class MovementController : MonoBehaviour
     // _onReached: 도착 시 콜백
     public void MoveToCell(Vector3Int _targetCell, System.Action _onReached = null)
     {
+        Vector3Int startCell = TileManager.Instance.WorldToCell(transform.position);
         mTargetCell = _targetCell;
         mIsMoving = true;
         // PathFinder의 FindPath는 셀좌표(Vector3Int)만 받음
-        mCurrentPath = PathFinder.Instance.FindPath(TileManager.Instance.WorldToCell(transform.position), mTargetCell, this.gameObject);
+        mCurrentPath = PathFinder.Instance.FindPath(startCell, mTargetCell, this.gameObject);
         if (mCurrentPath != null && mCurrentPath.Count > 0)
         {
+            Debug.Log($"{gameObject.name}이(가) {_targetCell}까지의 경로를 찾았습니다.");
             mCurrentPathIndex = 0;
             mIsMoving = true;
         }
@@ -149,8 +151,12 @@ public class MovementController : MonoBehaviour
                             closestStandingCell = cell;
                         }
                     }
-                    mTargetCell = closestStandingCell;
-                    MoveToCell(closestStandingCell);
+                    // 목표 셀이 바뀐 경우에만 갱신
+                    if (mTargetCell != closestStandingCell)
+                    {
+                        mTargetCell = closestStandingCell;
+                        MoveToCell(closestStandingCell);
+                    }
                 }
             }
         }
@@ -229,7 +235,7 @@ public class MovementController : MonoBehaviour
         float moveStep = mMoveSpeed * Time.deltaTime;
 
         // 셀 중심까지 이동
-        if (distance <= moveStep)
+        if (distance <= mReachedDistance)
         {
             // 셀 중심에 정확히 위치 고정
             transform.position = nextCellWorldPos;
@@ -277,6 +283,8 @@ public class MovementController : MonoBehaviour
             mNPCLog.SetNPCLog($"{gameObject.name}이(가) 목적지({mTargetObject?.name})에 도착함");
             Debug.Log($"{gameObject.name}이(가) 목적지({mTargetObject?.name})에 도착함");
             mTargetObject = null;
+            mTargetName = null;
+            mTargetCell = Vector3Int.zero;
             mCurrentPath = null;
             mCurrentPathIndex = 0;
             mCurrentTargetCell = Vector3Int.zero;
@@ -301,7 +309,8 @@ public class MovementController : MonoBehaviour
         for (int i = 1; i <= mDetectionTileCount; i++)
         {
             Vector3Int checkCell = currentCell + new Vector3Int(Mathf.RoundToInt(direction.x * i), Mathf.RoundToInt(direction.y * i), 0);
-            if (TileManager.Instance.TryGetTileInfo(checkCell, out TileManager.TileInfo tileInfo) && !tileInfo.canMove)
+            // 셀 좌표로 이동 불가능하면 참
+            if (!TileManager.Instance.CanMoveInCell(checkCell))
                 return true;
         }
         return false;
@@ -310,7 +319,8 @@ public class MovementController : MonoBehaviour
     private bool IsObstacleInTargetCell()
     {
         Vector3Int checkCell = TileManager.Instance.WorldToCell(mTargetCell);
-        if (TileManager.Instance.TryGetTileInfo(checkCell, out TileManager.TileInfo tileInfo) && !tileInfo.canMove)
+        // 셀 좌표로 이동 불가능하면 참
+        if (!TileManager.Instance.CanMoveInCell(checkCell))
             return true;
         return false;
     }
@@ -325,17 +335,17 @@ public class MovementController : MonoBehaviour
             // 시작점부터 끝점까지 선으로 연결
             for (int i = 0; i < mCurrentPath.Count - 1; i++)
             {
-                Vector3 startPos = new Vector3(mCurrentPath[i].x + 0.5f, mCurrentPath[i].y + 0.5f, 0);
-                Vector3 endPos = new Vector3(mCurrentPath[i + 1].x + 0.5f, mCurrentPath[i + 1].y + 0.5f, 0);
-                Gizmos.DrawLine(startPos, endPos);
+                Vector3Int startCell = new Vector3Int(mCurrentPath[i].x, mCurrentPath[i].y, 0);
+                Vector3Int endCell = new Vector3Int(mCurrentPath[i + 1].x, mCurrentPath[i + 1].y, 0);
+                Gizmos.DrawLine(TileManager.Instance.GetCellCenterWorld(startCell), TileManager.Instance.GetCellCenterWorld(endCell));
             }
 
             // 각 노드 위치에 구체 그리기
             Gizmos.color = Color.yellow;
             foreach (Node node in mCurrentPath)
             {
-                Vector3 nodePos = new Vector3(node.x + 0.5f, node.y + 0.5f, 0);
-                Gizmos.DrawSphere(nodePos, 0.2f);
+                Vector3Int cell = new Vector3Int(node.x, node.y, 0);
+                Gizmos.DrawSphere(TileManager.Instance.GetCellCenterWorld(cell), 0.2f);
             }
 
             // 현재 목표 위치 표시

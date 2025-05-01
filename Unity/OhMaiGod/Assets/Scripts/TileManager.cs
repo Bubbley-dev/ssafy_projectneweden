@@ -147,6 +147,12 @@ public class TileManager : MonoBehaviour
     public void UnregisterObject(GameObject obj)
     {
         Bounds bounds = GetObjectBounds(obj);
+        UnregisterObjectBounds(obj, bounds);
+    }
+
+    // 특정 Bounds 기준으로 오브젝트 해제 (이전 위치 해제용)
+    public void UnregisterObjectBounds(GameObject obj, Bounds bounds)
+    {
         var cells = GetOccupiedCells(bounds);
         foreach (var cell in cells)
         {
@@ -156,7 +162,7 @@ public class TileManager : MonoBehaviour
                 mTilemapInfo[cell] = info;
             }
         }
-        if (mShowDebug) Debug.Log($"오브젝트 삭제: {obj.name}");
+        if (mShowDebug) Debug.Log($"오브젝트 삭제(이전 위치): {obj.name}");
     }
 
     // 오브젝트의 월드 바운드로부터 차지하는 셀 목록 반환
@@ -200,6 +206,13 @@ public class TileManager : MonoBehaviour
     {
         if (mTilemapInfo.TryGetValue(cell, out TileInfo info))
             return info.objects != null && info.objects.Count > 0;
+        return false;
+    }
+
+    public bool CanMoveInCell(Vector3Int cell)
+    {
+        if (mTilemapInfo.TryGetValue(cell, out TileInfo info))
+            return info.canMove;
         return false;
     }
 

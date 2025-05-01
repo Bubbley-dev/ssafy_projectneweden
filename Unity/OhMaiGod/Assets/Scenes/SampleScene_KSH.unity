@@ -5941,6 +5941,14 @@ PrefabInstance:
       value: Desk
       objectReference: {fileID: 0}
     - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
+      propertyPath: mCanMove
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
+      propertyPath: mShowDebug
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
       propertyPath: mGroundTilemap
       value: 
       objectReference: {fileID: 597632758}
@@ -6379,6 +6387,14 @@ PrefabInstance:
     - target: {fileID: 8557750864681169112, guid: f18a840692084c145b574bf9d30f315c, type: 3}
       propertyPath: m_Name
       value: Cafeteria
+      objectReference: {fileID: 0}
+    - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
+      propertyPath: mCanMove
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
+      propertyPath: mShowDebug
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
       propertyPath: mGroundTilemap
@@ -7034,6 +7050,14 @@ PrefabInstance:
     - target: {fileID: 8557750864681169112, guid: f18a840692084c145b574bf9d30f315c, type: 3}
       propertyPath: m_Name
       value: LivingRoom
+      objectReference: {fileID: 0}
+    - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
+      propertyPath: mCanMove
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
+      propertyPath: mShowDebug
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
       propertyPath: mGroundTilemap
@@ -7956,6 +7980,14 @@ PrefabInstance:
       value: Bedroom
       objectReference: {fileID: 0}
     - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
+      propertyPath: mCanMove
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
+      propertyPath: mShowDebug
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
       propertyPath: mGroundTilemap
       value: 
       objectReference: {fileID: 597632758}
@@ -8216,7 +8248,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5465980533100705227, guid: d80bb227c084d9b46b156c2c1a226b53, type: 3}
       propertyPath: mShowDebug
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5465980533100705227, guid: d80bb227c084d9b46b156c2c1a226b53, type: 3}
       propertyPath: mGroundTilemap
@@ -8475,6 +8507,14 @@ PrefabInstance:
     - target: {fileID: 8557750864681169112, guid: f18a840692084c145b574bf9d30f315c, type: 3}
       propertyPath: m_Name
       value: Kitchen
+      objectReference: {fileID: 0}
+    - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
+      propertyPath: mCanMove
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
+      propertyPath: mShowDebug
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8663613268944117034, guid: f18a840692084c145b574bf9d30f315c, type: 3}
       propertyPath: mTableSize.x
