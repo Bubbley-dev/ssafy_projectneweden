@@ -1,0 +1,144 @@
+RELEVANT MEMORIES:
+1. Event: "Food suddenly appeared at home"  
+   Action: "eat meal home"  
+   Similarity: 0.5718
+
+2. Event: "Food suddenly appeared at the school"  
+   Action: "eat snack school"  
+   Similarity: 0.5526
+
+3. Event: "Saw pizza in the restaurant"  
+   Action: "eat pizza restaurant"  
+   Similarity: 0.5347
+
+4. Event: "Saw my favorite pasta in the restaurant"  
+   Action: "eat pasta restaurant"  
+   Similarity: 0.5182
+
+5. Event: "Saw my favorite coffee in the cafe"  
+   Action: "drink coffee cafe"  
+   Similarity: 0.5006
+
+Agent Data :
+{
+  "agent": {
+    "name": "John",
+    "state": {
+      "hunger": 9,
+      "sleepiness": 2,
+      "loneliness": 3
+    },
+    "section": "east_forest",
+    "location": "forest_entrance",
+    "date": "05-02", 
+    "time": "16:00",
+    "personality": ["introverted", "practical", "punctual"],
+    "event": "DISCOVERY_NEW_OBJECT",
+    "target": "Raspberry",
+    "visible_objects": {
+      "sections": [
+        {
+          "section_name": "east_forest",
+          "locations": [
+            {
+              "location": "forest_entrance",
+              "objects": ["oak_tree", "apple"]
+            },
+            {
+              "location": "deep_forest",
+              "objects": ["acorn", "mushroom"]
+            }
+          ]
+        }
+      ]
+    },
+    "nearby_agents": []
+  }
+}
+
+
+INSTRUCTIONS:
+You are the assistant in a game. Based on the provided information, you must determine the next action the agent (character) should take.
+
+There are two main types of input:
+
+Five past memories containing actions that were taken in similar situations.
+
+The agent's current state and environmental data in JSON format.
+
+The state values range from 0 to 10, with higher values indicating a stronger need that the agent will try to satisfy through their action.
+
+The event describes what just occurred. Think carefully about the appropriate action in response.
+
+The world is divided into Sections and Locations. A Section represents a map area, while a Location is a specific spot within a section.
+
+There are four total Sections: Village, Forest, Desert, and Beach.
+Each section contains several locations, and each location contains certain objects.
+
+Section Details:
+1. Village
+house: ["dining_table", "bookshelf", "bed"]
+
+town_hall: ["bulletin_board", "meeting_table", "clock"]
+
+cafe: ["coffee_machine", "pastry_display", "cozy_sofa"]
+
+park: ["swing_set", "fountain", "bench"]
+
+2. Forest
+forest_entrance: ["oak_tree", "fallen_leaves", "squirrel"]
+
+deep_forest: ["mushroom", "acorn", "wild_boar"]
+
+stream_bank: ["raspberry", "stream_water", "stone"]
+
+3. Desert
+sand_dunes: ["cactus", "lizard", "sandstorm"]
+
+oasis: ["palm_tree", "water_pool", "camel"]
+
+rocky_outcrop: ["scorpion", "sandstone", "hawk"]
+
+4. Beach
+shoreline: ["seashell", "crab", "driftwood"]
+
+cliffside: ["seagull", "rock", "binocular_spot"]
+
+tidal_pool: ["starfish", "seaweed", "snail"]
+
+ACTION OPTIONS:
+- move: go to a new location
+- interact: use/manipulate an object
+- eat: consume food
+- talk: speak to another agent
+- wait: remain inactive briefly
+- think: internal thought process
+- idle: remain idle without taking any action  
+- sleep: sleep to recover energy (agent becomes inactive for a longer period)  
+- die: be removed from the simulation
+
+⚠️** All actions except move must use an object from visible_objects in the current location.**
+
+OUTPUT FORMAT (Must be valid JSON):
+
+{
+  "action": {
+    "agent": "agent_name",
+    "action": "action_type",
+    "details": {
+      "section": "section_name",
+      "location": "location_name",
+      "target": "object_or_agent"
+    }
+  },
+  "memory_update": {
+    "action": "with_whom_and_where_action_took_place",
+    "time": "{current_time}",
+    "importance": importance_rating
+  },
+  "reason": "Detailed explanation of why this action was chosen based on state, personality, etc."
+}
+
+
+
+
