@@ -1,6 +1,10 @@
-import urllib.request
+import requests
 import json
 import time
+import os
+
+# 전역 세션 객체 생성
+session = requests.Session()
 
 # ==============================
 #  서버 호출 함수
@@ -17,78 +21,37 @@ def get_response(prompt: str) -> str:
     }
     # HTTP 요청 준비
     data = json.dumps(payload).encode('utf-8')
-    req = urllib.request.Request(
-        API_URL,
-        data=data,
-        headers={'Content-Type': 'application/json'}
-    )
-
+    
     # 요청-응답 시간 측정 시작
     start_time = time.time()
-    with urllib.request.urlopen(req) as resp:
-        raw = resp.read()
-    elapsed = time.time() - start_time
-
-    # 받은 바이트를 디코딩하고 JSON 파싱
-    result = json.loads(raw.decode('utf-8'))
-    answer = result.get("response", "")
-
-    # 결과 출력
-    print("\n🧠 응답:")
-    print(answer)
-    print(f"\n⏱ 응답시간: {elapsed:.3f}초\n")
-
-    return answer
-
-# ==============================
-#  프롬프트 로딩 & 상태 변환 함수
-# ==============================
-def load_prompt(txt_path: str, json_path: str) -> str:
-    """
-    1) prompt.txt에서 자연어 지침을 읽고,
-    2) state.json에서 에이전트 상태를 읽은 후
-    3) hunger, sleepiness, loneliness 수치를 'very/not' 구문으로 바꿔
-       원본 JSON의 agent['state'] 필드에 덮어쓰고,
-    4) 지침 + 수정된 JSON dump를 합쳐서 반환합니다.
-    """
-    # 1) 지침 불러오기
-    with open(txt_path, 'r', encoding='utf-8') as f:
-        instruction = f.read().strip()
-
-    # 2) 상태 JSON 불러오기
-    with open(json_path, 'r', encoding='utf-8') as f:
-        state_obj = json.load(f)
-
-    # 3) 수치 → 형용사 매핑 테이블
-    metric_adj = {
-        "hunger": "hungry",
-        "sleepiness": "sleepy",
-        "loneliness": "lonely"
-    }
-    # 수치(level: 1~10) 를 natural language로 변환
-    def describe(level: int, adj: str) -> str:
-        if level <= 3:
-            return f"not {adj}"
-        elif level <= 6:
-            return adj
-        else:
-            return f"very {adj}"
-
-    # 4) agents 배열 순회하면서 state 필드를 변환
-    for agent in state_obj.get("agents", []):
-        st = agent.get("state", {})
-        parts = []
-        # hunger, sleepiness, loneliness 순서대로
-        for key in ("hunger", "sleepiness", "loneliness"):
-            if key in st:
-                parts.append(describe(st[key], metric_adj[key]))
-        # 숫자 dict 대신 자연어 문자열로 대체
-        # ex: "very hungry, not sleepy, not lonely"
-        agent["state"] = ", ".join(parts)
-
-    # 5) 최종 프롬프트 조립: 지침 + JSON dump
-    prompt = instruction + "\n\n" + json.dumps(state_obj, ensure_ascii=False, indent=2)
-    return prompt
+    try:
+        res = session.post(
+            API_URL,
+            data=data,
+            headers={'Content-Type': 'application/json'}
+        )
+        res.raise_for_status()  # HTTP 오류 체크
+        
+        # Response 객체의 text 속성 사용
+        result = json.loads(res.text)
+        answer = result.get("response", "")
+        
+        # 결과 출력
+        print("\n🧠 응답:")
+        print(answer)
+        print(f"\n⏱ 응답시간: {time.time() - start_time:.3f}초\n")
+        
+        return answer
+        
+    except requests.exceptions.RequestException as e:
+        print(f"\n❌ 오류 발생: {str(e)}")
+        return ""
+    except json.JSONDecodeError as e:
+        print(f"\n❌ JSON 파싱 오류: {str(e)}")
+        return ""
+    except Exception as e:
+        print(f"\n❌ 예상치 못한 오류: {str(e)}")
+        return ""
 
 # ==============================
 #  스크립트 진입점
@@ -99,13 +62,28 @@ if __name__ == "__main__":
     HOST = 'localhost'
     API_URL = f"http://{HOST}:{PORT}/api/generate"
 
-    # prompt.txt 와 state.json 경로를 지정
-    prompt = load_prompt('./prompts/prompt.txt', 'state.json')
-
-    # 프롬프트 찍어보기
-    print("===== SEND PROMPT =====")
-    print(prompt)
-    print("===== END PROMPT =====\n")
-
-    # LLM 호출
-    get_response(prompt)
+    print("=== AI 챗봇 테스트 시작 ===")
+    print("프롬프트 파일을 사용하여 테스트합니다.")
+    
+    # 현재 스크립트의 디렉토리 경로를 기준으로 프롬프트 파일 경로 설정
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    prompt_path = os.path.join(current_dir, "prompt.txt")
+    
+    try:
+        # 프롬프트 로드
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            prompt = f.read().strip()
+        
+        # 프롬프트 출력
+        print("\n===== LOADED PROMPT =====")
+        print(prompt)
+        print("===== END PROMPT =====\n")
+        
+        # LLM 호출
+        get_response(prompt)
+        
+    except FileNotFoundError as e:
+        print(f"\n❌ 파일을 찾을 수 없습니다: {str(e)}")
+        print(f"찾으려는 파일 경로: {prompt_path}")
+    except Exception as e:
+        print(f"\n❌ 오류 발생: {str(e)}")
