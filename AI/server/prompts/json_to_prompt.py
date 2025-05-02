@@ -17,10 +17,10 @@ def get_response(prompt: str, system_prompt: str, api_url: str = "http://localho
     
     # API 요청 데이터 준비
     data = {
-        "model": "gemma3:1b",
+        "model": "gemma3",
         "prompt": prompt,
         "system": system_prompt,
-        "temperature": 0,
+        "temperature": 0.5,
         "stream": False
     }
     

@@ -42,7 +42,6 @@ RESPONSE FORMAT (provide ONLY valid JSON):
     "location": "location_name",
     "target": "object_or_agent",
     "using": "item_if_needed",
-    "message": "spoken_text_or_thought"
   }},
-  "reason": "reasoning_text"
 }}
+
