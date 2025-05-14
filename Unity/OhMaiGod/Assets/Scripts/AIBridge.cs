@@ -81,6 +81,17 @@ public class AIBridge : MonoBehaviour
         {
             send_test();
         }
+
+        if(Input.GetKeyDown(KeyCode.F))
+        {
+            mAgentControllers[0].ChangeState(AgentState.WAITING_FOR_AI_RESPONSE);
+        }
+
+        if(Input.GetKeyDown(KeyCode.G))
+        {
+            mAgentControllers[0].AllowStateChange = true;
+            mAgentControllers[0].ChangeState(AgentState.WAITING);
+        }
     }
     // 게임 시작시 자동으로 첫 요청 보내기(임시)
     public void send_test()

@@ -275,6 +275,11 @@ public class AgentController : MonoBehaviour
         mCurrentState = CurrentState;
     }
 
+    private void UpdateSchedule()
+    {
+        
+    }
+
     // 새 활동 시작 (AgentScheduler에서 호출)
     public void StartAction(ScheduleItem _action)
     {

@@ -42,8 +42,6 @@ public class AgentScheduler : MonoBehaviour
             LogManager.Log("Scheduler", "더미 스케줄이 등록되었습니다.", 2);
         }
         mPrevUseDummySchedule = mUseDummySchedule;
-        
-        UpdateAction();
     }
 
     // 새로운 일정 항목 추가
@@ -243,66 +241,36 @@ public class AgentScheduler : MonoBehaviour
         // 상태 변경 불가한 상태(AI 응답 대기 중)인 경우 처리 안함
         if(!mAgentController.AllowStateChange) return;
 
-        // 현재 활동이 있고 아직 유효한 경우
-        if (mCurrentAction != null)
+        // 이전 활동 저장
+        ScheduleItem prevAction = mCurrentAction;
+
+        // 미완료 활동 중 현재 시간에 해당하는 것 찾기 (정렬된 리스트이므로 처음부터 순회)
+        ScheduleItem bestActivity = null;
+        TimeSpan currentTime = TimeManager.Instance.GetCurrentGameTime();
+        for (int i = 0; i < mDailySchedule.Count; i++)
         {
-            // 현재 시간에 해당하는 미완료 활동 중 우선순위가 같거나 높은것 선택
-            var mustBeStarted = mDailySchedule
-                .Where(item => !item.IsCompleted &&
-                       TimeManager.Instance.GetCurrentGameTime() >= item.StartTime &&
-                       TimeManager.Instance.GetCurrentGameTime() < item.EndTime)
-                .OrderBy(item => item.Priority) // 우선순위 높은 것(숫자 작은 것) 우선
-                .ThenByDescending(item => item.StartTime)   // 시작시간이 늦은 것 우선 (이렇게 해야 현재 활동이 끝나고 바로 다음 활동이 시작됨)
-                .ToList();
-
-            var bestActivity = mustBeStarted.FirstOrDefault();
-
-            // 현재 활동 강제 완료
-            if (bestActivity != null && (mCurrentAction.ID != bestActivity.ID))
+            ScheduleItem item = mDailySchedule[i];
+            if (item.IsCompleted) continue;
+            if (currentTime >= item.StartTime && currentTime < item.EndTime)
             {
-                if (!mCurrentAction.IsCompleted)
-                {
-                    CompleteCurrentAction();
-                }
-            }
-            else if (bestActivity == null && TimeManager.Instance.GetCurrentGameTime() > mCurrentAction.EndTime)
-            {
-                // 기존 종료 조건도 유지
-                if (!mCurrentAction.IsCompleted)
-                {
-                    CompleteCurrentAction();
-                }
-            }
-            else
-            {
-                // 현재 활동 계속
-                return;
+                bestActivity = item;
+                break; // 정렬되어 있으므로 첫 번째 항목이 가장 우선순위 높음
             }
         }
-        
-        // 시간순으로 다음 활동 찾기
-        mCurrentAction = null;
-        mNextAction = null;
-        
-        // 미완료 활동 중 현재 시간에 해당하는 것 찾기
-        var currentTimeActivities = mDailySchedule
-            .Where(item => !item.IsCompleted && 
-                   TimeManager.Instance.GetCurrentGameTime() >= item.StartTime && 
-                   TimeManager.Instance.GetCurrentGameTime() < item.EndTime)
-            .OrderBy(item => item.Priority)
-            .ToList();
-        
-        if (currentTimeActivities.Count > 0)
+
+        // 활동이 변경된 경우 기존 활동 완료 처리
+        if (bestActivity != null)
         {
-            // 현재 시간에 가장 우선순위 높은 활동 선택
-            mCurrentAction = currentTimeActivities[0];
-            
+            if (prevAction != null && (prevAction.ID != bestActivity.ID) && !prevAction.IsCompleted)
+            {
+                // 기존 활동이 다르고, 완료되지 않았다면 완료 처리
+                CompleteCurrentAction();
+            }
+            mCurrentAction = bestActivity;
             if (mShowDebugInfo)
             {
                 LogManager.Log("Scheduler", $"새 활동 시작: {mCurrentAction.ActionName} @ {mCurrentAction.LocationName}", 2);
             }
-            
-            // 에이전트에 활동 시작 알림
             if (mAgentController != null)
             {
                 mAgentController.StartAction(mCurrentAction);
@@ -310,21 +278,23 @@ public class AgentScheduler : MonoBehaviour
         }
         else
         {
-            // 다음으로 예정된 활동 찾기
-            var futureActivities = mDailySchedule
-                .Where(item => !item.IsCompleted && TimeManager.Instance.GetCurrentGameTime() < item.StartTime)
-                .OrderBy(item => item.StartTime)
-                .ToList();
-            
-            if (futureActivities.Count > 0)
+            // 다음으로 예정된 활동 찾기 (정렬된 리스트이므로 처음부터 순회)
+            ScheduleItem nextActivity = null;
+            for (int i = 0; i < mDailySchedule.Count; i++)
             {
-                mNextAction = futureActivities[0];
-                
-                if (mShowDebugInfo)
+                ScheduleItem item = mDailySchedule[i];
+                if (item.IsCompleted) continue;
+                if (currentTime < item.StartTime)
                 {
-                    TimeSpan timeUntilNext = mNextAction.StartTime - TimeManager.Instance.GetCurrentGameTime();
-                    LogManager.Log("Scheduler", $"다음 활동: {mNextAction.ActionName} (남은 시간: {timeUntilNext.Hours}시간 {timeUntilNext.Minutes}분)", 2);
+                    nextActivity = item;
+                    break;
                 }
+            }
+            mNextAction = nextActivity;
+            if (mNextAction != null && mShowDebugInfo)
+            {
+                TimeSpan timeUntilNext = mNextAction.StartTime - currentTime;
+                LogManager.Log("Scheduler", $"다음 활동: {mNextAction.ActionName} (남은 시간: {timeUntilNext.Hours}시간 {timeUntilNext.Minutes}분)", 2);
             }
         }
     }
