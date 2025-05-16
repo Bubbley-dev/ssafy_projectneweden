@@ -262,7 +262,10 @@ public class AgentController : MonoBehaviour
     // Interactable의 이벤트를 구독하여 위치 변경 시 호출
     private void HandleMyLocationChanged(Interactable _interactable, string _newLocation)
     {
+        if (mCurrentLocation.ToLower() == _newLocation.ToLower()) return;
         mCurrentLocation = _newLocation;
+        Debug.Log("위치 변경 감지"+ _interactable.name + "mCurrentLocation: "+ mCurrentLocation + " _newLocation: " +  _newLocation);
+        SendCurrentLocationInfo(_newLocation);
         // mCurrentAction이 null이 아니고, 새로운 위치가 목표 위치와 같으면 상태 전환
         if (mCurrentAction != null && _newLocation == mCurrentAction.LocationName)
         {
@@ -650,5 +653,13 @@ public class AgentController : MonoBehaviour
         string feedbackJson = JsonUtility.ToJson(mCurrentFeedback);
         LogManager.Log("AI", $"{mName}: 피드백 전송 JSON: {feedbackJson}", 2);
         AIBridge_Perceive.Instance.SendFeedbackToAI(mCurrentFeedback);
+    }
+
+    // 에이전트의 현재 지역이 바뀌었을 때, 현재 지역의 오브젝트 목록을 전송
+    public void SendCurrentLocationInfo(string _newLocation){
+        PerceiveEvent perceiveEvent = new PerceiveEvent();
+        perceiveEvent.event_type = PerceiveEventType.AGENT_LOCATION_CHANGE;
+        perceiveEvent.event_location = _newLocation;
+        Debug.Log("위치 변경: "+TileManager.Instance.GetInteractablesInLocation(_newLocation));
     }
 }
