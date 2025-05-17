@@ -101,10 +101,11 @@ public class AgentVision : MonoBehaviour
                 // 흥미도 계산
                 bool isFirst = true;
                 float totalInterest = CalculateInterest(interactable, isFirst);
-                float threshold = 100.0f;
+                float thresholdReact = 100.0f;
+                float thresholdPercieve = 50.0f;
                 // 에이전트의 선호 오브젝트, 비선호 오브젝트 체크
                 // TODO: 반응과 관찰에 대한 임계치 분리, 호출 함수 분리
-                if (totalInterest >= threshold){
+                if (totalInterest >= thresholdReact){
                     // 이벤트 전송
                     PerceiveEvent perceiveEvent = new PerceiveEvent();
                     perceiveEvent.event_type = PerceiveEventType.INTERACTABLE_DISCOVER;
@@ -114,6 +115,16 @@ public class AgentVision : MonoBehaviour
                     // TODO: 오브젝트 이름이 아니라 이벤트 설명을 만든 뒤 설명을 전송해야함
                     perceiveEvent.event_description = interactable.mInteractableData.mName;
                     mAIBridgePerceive.SendPerceiveEvent(mAgentController, perceiveEvent);
+                }
+                else if (totalInterest >= thresholdPercieve){
+                    PerceiveEvent perceiveEvent = new PerceiveEvent();
+                    perceiveEvent.event_type = PerceiveEventType.INTERACTABLE_DISCOVER;
+                    perceiveEvent.event_location = interactable.CurrentLocation;
+                    perceiveEvent.event_role = $"{mAgentController.AgentName} saw";
+                    perceiveEvent.event_is_save = true;
+                    perceiveEvent.event_description =$"{interactable.mInteractableData.mName} at {interactable.CurrentLocation}";
+                    Debug.Log(perceiveEvent.event_description);
+                    mAIBridgePerceive.SendPercieveToAI(mAgentController,perceiveEvent);
                 }
             }
         }

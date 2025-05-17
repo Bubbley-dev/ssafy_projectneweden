@@ -187,7 +187,6 @@ public class AIBridge_Perceive : MonoBehaviour
         string requestJson = JsonUtility.ToJson(requestData);
         LogManager.Log("AI", $"[AIBridge_Perceive] perceiveEvent JSON: {requestData}", 3);
 
-        // HTTP 요청 설정 (임시 주소)
         UnityWebRequest request = new UnityWebRequest("http://127.0.0.1:5000/perceive", "POST");
         byte[] bodyRaw = Encoding.UTF8.GetBytes(requestJson);
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
@@ -268,7 +267,6 @@ public class AIBridge_Perceive : MonoBehaviour
         string requestJson = JsonUtility.ToJson(requestData);
         LogManager.Log("AI", $"[AIBridge_Perceive] perceiveEvent JSON: {requestData}", 3);
 
-        // HTTP 요청 설정 (임시 주소)
         UnityWebRequest request = new UnityWebRequest("http://127.0.0.1:5000/react", "POST");
         byte[] bodyRaw = Encoding.UTF8.GetBytes(requestJson);
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
@@ -360,7 +358,6 @@ public class AIBridge_Perceive : MonoBehaviour
         string requestJson = JsonUtility.ToJson(requestData);
         LogManager.Log("AI", $"[AIBridge_Perceive] perceiveEvent JSON: {requestData}", 3);
 
-        // HTTP 요청 설정 (임시 주소)
         UnityWebRequest request = new UnityWebRequest("http://127.0.0.1:5000/make_reaction", "POST");
         byte[] bodyRaw = Encoding.UTF8.GetBytes(requestJson);
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
@@ -434,6 +431,7 @@ public class AIBridge_Perceive : MonoBehaviour
         }
     }
 
+    // 피드백 전송
     public void SendFeedbackToAI(PerceiveFeedback _feedback){
         LogManager.Log("AI", $"[AIBridge_Perceive] SendFeedbackToAI: {_feedback}", 3);
         // TODO: 피드백 전송 엔드포인트 구현 후 주석 해제
@@ -449,7 +447,6 @@ public class AIBridge_Perceive : MonoBehaviour
         string requestJson = $"{{\"agent\":{feedbackJson}}}";
         LogManager.Log("AI", $"[AIBridge_Perceive] feedback JSON: {requestJson}", 3);
 
-        // HTTP 요청 설정 (임시 주소)
         UnityWebRequest request = new UnityWebRequest("http://127.0.0.1:5000/simple_action_feedback", "POST");
         byte[] bodyRaw = Encoding.UTF8.GetBytes(requestJson);
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
@@ -467,6 +464,52 @@ public class AIBridge_Perceive : MonoBehaviour
         else
         {
             LogManager.Log("AI", $"❌ 피드백 전송 실패: " + request.error, 0);
+        }
+    }
+
+    // 관찰 정보 전송
+    public void SendPercieveToAI(AgentController _agent, PerceiveEvent _percive){
+        LogManager.Log("AI", $"[AIBridge_Perceive] SendPercieveToAI:{_agent}, {_percive}", 3);
+        StartCoroutine(SendPercieveToAIData(_agent, _percive));
+    }
+
+    IEnumerator SendPercieveToAIData(AgentController _agent, PerceiveEvent _percive){
+       // ---- 에이전트 정보 ----
+
+        AgentRequest requestData = new AgentRequest
+        {
+            agent = new Agent
+            {
+                name = _agent.AgentName,
+                current_location = _agent.CurrentLocation,
+                time = TimeManager.Instance.GetCurrentGameTime(),
+                perceive_event = _percive,          
+            }
+        };
+        // ---- 이벤트 정보 ----
+        // perceiveEvent를 JSON으로 변환
+        string requestJson = JsonUtility.ToJson(requestData);
+        LogManager.Log("AI", $"[AIBridge_Perceive] perceiveEvent JSON: {requestData}", 3);
+
+        UnityWebRequest request = new UnityWebRequest("http://127.0.0.1:5000/perceive", "POST");
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(requestJson);
+        request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+        request.downloadHandler = new DownloadHandlerBuffer();
+        request.SetRequestHeader("Content-Type", "application/json");
+
+        yield return request.SendWebRequest();
+
+        ResponseReactJudge response = JsonUtility.FromJson<ResponseReactJudge>(request.downloadHandler.text);
+        
+        mIsRequesting = false;
+
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            LogManager.Log("AI", $"✅ 반응 판단 응답받음: " + request.downloadHandler.text, 2);
+        }
+        else
+        {
+            LogManager.Log("AI", $"❌ 반응 행동 응답실패: " + request.error, 0);
         }
     }
 
