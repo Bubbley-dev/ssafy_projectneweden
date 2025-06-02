@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public class NeedsSlider : MonoBehaviour
 {
@@ -11,13 +12,14 @@ public class NeedsSlider : MonoBehaviour
 
     private void Awake()
     {
-        // 참조가 없으면 자동 할당 시도
-        if (mAgentController == null)
-            mAgentController = FindFirstObjectByType<AgentController>();
-        if (mSlider == null)
-            mSlider = GetComponentInChildren<Slider>();
-        if (mFills == null || mFills.Length == 0)
-            mFills = GetComponentsInChildren<Image>(true); // true: 비활성 포함
+        SceneManager.sceneLoaded += OnSceneLoaded;
+        
+        Init();
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        Init();
     }
 
     private void Update()
@@ -69,5 +71,16 @@ public class NeedsSlider : MonoBehaviour
             if (mFills[fillIndex].type == Image.Type.Filled)
                 mFills[fillIndex].fillAmount = normalizedValue;
         }
+    }
+
+    private void Init()
+    {
+        // 참조가 없으면 자동 할당 시도
+        if (mAgentController == null)
+            mAgentController = FindFirstObjectByType<AgentController>();
+        if (mSlider == null)
+            mSlider = GetComponentInChildren<Slider>();
+        if (mFills == null || mFills.Length == 0)
+            mFills = GetComponentsInChildren<Image>(true); // true: 비활성 포함
     }
 }
